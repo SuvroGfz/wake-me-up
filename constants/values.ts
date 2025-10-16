@@ -1,0 +1,1 @@
+export const LOCATION_TRACKING_INTERVAL_MS : number =  2000;
