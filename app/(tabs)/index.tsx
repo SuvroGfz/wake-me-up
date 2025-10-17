@@ -23,6 +23,13 @@ export default function HomeMenu() {
             >
                 <Text style={styles.buttonText}>🎯 Track Distance to Destination</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+                style={[styles.button, { backgroundColor: '#FF3B30' }]}
+                onPress={() => router.push('/(tabs)/location-alarm')}
+            >
+                <Text style={styles.buttonText}>⏰ Destination Alarm</Text>
+            </TouchableOpacity>
         </View>
     );
 }

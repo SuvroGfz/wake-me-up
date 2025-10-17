@@ -2,7 +2,8 @@ import {useState} from 'react';
 import {View, Text, ScrollView, TouchableOpacity, Modal, TextInput, Alert} from 'react-native';
 import {useLocationTracker} from '@/hooks/useLocationTracker';
 import {styles} from '@/styles/styles';
-import MapSelector from '@/components/MapPicker'; // make sure filename matches!
+import MapSelector from '@/components/map/MapPicker';
+import MapViewer from '@/components/map/MapViewer';
 
 export default function DestinationTracking() {
     const [coordInput, setCoordInput] = useState<string>(''); // single input field
@@ -106,6 +107,13 @@ export default function DestinationTracking() {
                             </Text>
                         ))}
                     </ScrollView>
+
+                    <MapViewer
+                        current={location}
+                        destination={target}
+                        // heading={location?.heading ?? 0}  // optional
+                        height={250}
+                    />
 
                     <TouchableOpacity
                         style={[styles.button, {backgroundColor: '#FF9500', marginTop: 20}]}
