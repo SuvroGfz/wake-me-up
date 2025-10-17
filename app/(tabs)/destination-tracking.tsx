@@ -1,49 +1,36 @@
-// app/(tabs)/destination-tracking.tsx
-import {useState} from 'react';
-import {View, Text, TextInput, ScrollView, TouchableOpacity} from 'react-native';
-import {useLocationTracker} from '@/hooks/useLocationTracker';
-import {styles} from '@/styles/styles';
+import { useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Modal } from 'react-native';
+import { useLocationTracker } from '@/hooks/useLocationTracker';
+import { styles } from '@/styles/styles';
+import MapSelector from '@/components/MapPicker';
 
 export default function DestinationTracking() {
-    const [targetLat, setTargetLat] = useState<string>('');
-    const [targetLon, setTargetLon] = useState<string>('');
-    const [targetSet, setTargetSet] = useState(false);
+    const [target, setTarget] = useState<{ latitude: number; longitude: number } | null>(null);
+    const [mapVisible, setMapVisible] = useState(false);
 
-    const target =
-        targetSet && targetLat && targetLon
-            ? {latitude: parseFloat(targetLat), longitude: parseFloat(targetLon)}
-            : undefined;
-
-    const {location, errorMsg, targetLogs} = useLocationTracker(undefined, target);
+    const { location, errorMsg, targetLogs } = useLocationTracker(undefined, target || undefined);
 
     return (
         <View style={styles.container}>
             <Text style={styles.title}>🎯 Destination Tracker</Text>
 
-            {!targetSet ? (
+            {!target ? (
                 <>
-                    <Text>Enter Destination Coordinates:</Text>
-                    <TextInput
-                        placeholder="Latitude"
-                        value={targetLat}
-                        onChangeText={setTargetLat}
-                        keyboardType="numeric"
-                        style={styles.input}
-                    />
-                    <TextInput
-                        placeholder="Longitude"
-                        value={targetLon}
-                        onChangeText={setTargetLon}
-                        keyboardType="numeric"
-                        style={styles.input}
-                    />
-
                     <TouchableOpacity
-                        style={[styles.button, {backgroundColor: '#FF9500'}]}
-                        onPress={() => setTargetSet(true)}
+                        style={[styles.button, { backgroundColor: '#007AFF' }]}
+                        onPress={() => setMapVisible(true)}
                     >
-                        <Text style={styles.buttonText}>Start Tracking</Text>
+                        <Text style={styles.buttonText}>Select Destination on Map</Text>
                     </TouchableOpacity>
+
+                    <Modal visible={mapVisible} animationType="slide">
+                        <MapSelector
+                            onSelect={(coords) => {
+                                setTarget(coords);
+                                setMapVisible(false);
+                            }}
+                        />
+                    </Modal>
                 </>
             ) : (
                 <>
@@ -51,8 +38,10 @@ export default function DestinationTracking() {
                         <Text style={styles.error}>{errorMsg}</Text>
                     ) : location ? (
                         <>
-                            <Text>Current Latitude: {location.latitude}</Text>
-                            <Text>Current Longitude: {location.longitude}</Text>
+                            <Text>Current Latitude: {location.latitude.toFixed(6)}</Text>
+                            <Text>Current Longitude: {location.longitude.toFixed(6)}</Text>
+                            <Text>Target Latitude: {target.latitude.toFixed(6)}</Text>
+                            <Text>Target Longitude: {target.longitude.toFixed(6)}</Text>
                         </>
                     ) : (
                         <Text>Fetching location...</Text>
@@ -61,7 +50,7 @@ export default function DestinationTracking() {
                     <Text style={styles.subtitle}>Logs:</Text>
                     <ScrollView style={styles.logBox}>
                         {targetLogs.map((log, i) => (
-                            <Text key={i} style={[styles.logText, log.color ? {color: log.color} : null]}>
+                            <Text key={i} style={[styles.logText, log.color ? { color: log.color } : null]}>
                                 {log.message}
                             </Text>
                         ))}
