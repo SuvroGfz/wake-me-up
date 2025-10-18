@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/wake-me-up.png",
-    "scheme": "helloworldapp",
+    "scheme": "wakemeupapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "platforms": [
@@ -16,8 +16,11 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "App uses your location to trigger alarms.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "App needs your location in the background to trigger alarms.",
         "UIBackgroundModes": [
-          "location"
+          "location",
+          "fetch"
         ]
       }
     },
@@ -26,7 +29,9 @@
       "package": "suvro.gfz.wakemeup",
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",

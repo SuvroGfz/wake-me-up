@@ -25,7 +25,7 @@ export default function LocationAlarm() {
 
     const {location, errorMsg, targetLogs} = useLocationTracker(undefined, target || undefined);
 
-    const player = useAudioPlayer(require('@/assets/audio/alarm-tones/alarm1.wav'), {
+    const player = useAudioPlayer(require('@/assets/audio/alarm-tones/alarm1.mp3'), {
         updateInterval: 500,
         downloadFirst: true,
     });

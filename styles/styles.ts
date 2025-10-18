@@ -52,4 +52,7 @@ export const styles = StyleSheet.create({
         fontWeight: '600',
         fontSize: 16,
     },
+    row: {flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12},
+    log: {fontSize: 12, paddingVertical: 4},
+    empty: {color: '#666', textAlign: 'center', marginTop: 20},
 });
