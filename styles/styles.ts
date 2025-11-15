@@ -12,6 +12,7 @@ export const styles = StyleSheet.create({
         fontWeight: '600',
         textAlign: 'center',
         marginBottom: 12,
+        marginTop:12
     },
     subtitle: {
         fontSize: 16,

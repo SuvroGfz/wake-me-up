@@ -1,67 +1,59 @@
 // services/locationService.ts
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { LOCATION_TASK_NAME, LOCATION_TRACKING_INTERVAL_MS, LOCATION_LOG_KEY } from '@/constants/values';
+import { Platform } from 'react-native';
+import { LOCATION_TASK_NAME, LOCATION_TRACKING_INTERVAL_MS } from '@/constants/values';
 
-export async function requestPermissions() {
-    const { status: fg } = await Location.requestForegroundPermissionsAsync();
-    if (fg !== 'granted') throw new Error('Foreground location permission denied');
+export async function requestLocationPermissions() {
+    const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
+    if (foregroundStatus !== 'granted') throw new Error('Foreground location permission denied');
 
-    const { status: bg } = await Location.requestBackgroundPermissionsAsync();
-    if (bg !== 'granted') console.warn('Background location permission not fully granted');
-    return { fg, bg };
+    // Android requires separate background permission (and on Android 11+ special),
+    // on iOS you may request "Always" later.
+    if (Platform.OS === 'android') {
+        const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
+        if (backgroundStatus !== 'granted') {
+            // still proceed — but background updates will be limited
+            console.warn('Background location permission not granted on Android');
+        }
+    } else {
+        // iOS: requestAlways if you plan to run in background long-term
+        try {
+            await Location.requestBackgroundPermissionsAsync();
+        } catch {
+            // not available pre-iOS 13, safe to ignore
+        }
+    }
+    return true;
 }
 
 export async function startBackgroundLocation() {
-    const registered = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
-    if (registered) {
-        console.log('[locationService] already registered');
-        return;
-    }
+    // Ensure permissions have been requested
+    await requestLocationPermissions();
 
-    await requestPermissions();
+    // If already running, don't start again
+    const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+    if (hasStarted) return;
 
     await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-        accuracy: Location.Accuracy.Highest,
+        accuracy: Location.Accuracy.Balanced, // choose appropriate
         timeInterval: LOCATION_TRACKING_INTERVAL_MS,
         distanceInterval: 0,
-        pausesUpdatesAutomatically: false,
-        // Android foreground service (recommended)
         foregroundService: {
+            // Android: this shows a persistent notification while tracking (required for long running)
             notificationTitle: 'Location tracking active',
-            notificationBody: 'Your location is being tracked.',
+            notificationBody: 'Your location is being used to trigger alarms',
+            notificationColor: '#FF3B30',
         },
-        showsBackgroundLocationIndicator: true, // iOS
+        showsBackgroundLocationIndicator: true, // iOS: shows ind. in status bar
+        pausesUpdatesAutomatically: false,
+        // may add deferredUpdatesInterval etc.
     });
-
-    console.log('[locationService] started');
 }
 
 export async function stopBackgroundLocation() {
-    const registered = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
-    if (!registered) return;
-    await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
-    console.log('[locationService] stopped');
-}
-
-export async function readLocationLogs(): Promise<any[]> {
-    try {
-        const raw = await AsyncStorage.getItem(LOCATION_LOG_KEY);
-        if (!raw) return [];
-        const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) return [];
-        return parsed;
-    } catch (e) {
-        console.error('[locationService] read error', e);
-        return [];
-    }
-}
-
-export async function clearLocationLogs() {
-    try {
-        await AsyncStorage.removeItem(LOCATION_LOG_KEY);
-    } catch (e) {
-        console.error('[locationService] clear error', e);
+    const started = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+    if (started) {
+        await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
     }
 }
