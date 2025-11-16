@@ -1,133 +1,181 @@
 // app/(tabs)/index.tsx
-import {View, Text, TouchableOpacity, ScrollView, Switch} from 'react-native';
-import {useFocusEffect, useRouter} from 'expo-router';
-import {styles} from '@/styles/styles';
-import {useCallback, useState} from "react";
-import {Alarm} from "@/models/Alarm";
-import {loadAlarms} from "@/services/alarmService";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, { useCallback } from 'react';
+import {
+    View,
+    Text,
+    FlatList,
+    TouchableOpacity,
+    StyleSheet,
+    RefreshControl,
+    ActivityIndicator,
+} from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useAlarms } from '@/hooks/useAlarms';
+import AlarmCard from '@/components/alarm/AlarmCard';
 
-export default function HomeMenu() {
+export default function HomeScreen() {
     const router = useRouter();
+    const { alarms, loading, error, refresh, toggle, remove } = useAlarms();
 
-    const [alarms, setAlarms] = useState<Alarm[]>([]);
-
-    const refreshAlarms = useCallback(async () => {
-        const data = await loadAlarms();
-        setAlarms(data.reverse());
-    }, []);
-
+    // Refresh alarms when screen comes into focus
     useFocusEffect(
         useCallback(() => {
-            refreshAlarms();
-        }, [refreshAlarms])
+            refresh();
+        }, [refresh])
     );
 
-    const toggleActive = async (id: string) => {
-        const updated = alarms.map(a => a.id === id ? {...a, active: !a.active} : a);
-        setAlarms(updated);
-        await AsyncStorage.setItem('alarms', JSON.stringify(updated));
+    const handleEdit = (id: string) => {
+        router.push({
+            pathname: '/new-alarm',
+            params: { editId: id },
+        });
     };
 
-    const deleteAlarm = async (id: string) => {
-        const updated = alarms.filter(a => a.id !== id);
-        setAlarms(updated);
-        await AsyncStorage.setItem('alarms', JSON.stringify(updated));
-    };
+    const renderEmpty = () => (
+        <View style={styles.empty}>
+            <Text style={styles.emptyIcon}>📍</Text>
+            <Text style={styles.emptyTitle}>No Location Alarms</Text>
+            <Text style={styles.emptyText}>
+                Create your first alarm to get notified when you reach a destination
+            </Text>
+        </View>
+    );
 
     return (
         <View style={styles.container}>
-            <Text style={styles.title}>🏠 Main Menu</Text>
+            {/* Header */}
+            <View style={styles.header}>
+                <Text style={styles.title}>📍 Location Alarms</Text>
+                <Text style={styles.subtitle}>
+                    {alarms.filter((a) => a.active).length} active alarm{alarms.filter((a) => a.active).length !== 1 ? 's' : ''}
+                </Text>
+            </View>
 
+            {/* Error */}
+            {error && (
+                <View style={styles.errorBanner}>
+                    <Text style={styles.errorText}>⚠️ {error}</Text>
+                </View>
+            )}
+
+            {/* Alarm List */}
+            {loading && alarms.length === 0 ? (
+                <View style={styles.loader}>
+                    <ActivityIndicator size="large" color="#3b82f6" />
+                </View>
+            ) : (
+                <FlatList
+                    data={alarms}
+                    keyExtractor={(item) => item.id}
+                    renderItem={({ item }) => (
+                        <AlarmCard
+                            alarm={item}
+                            onToggle={toggle}
+                            onEdit={handleEdit}
+                            onDelete={remove}
+                        />
+                    )}
+                    contentContainerStyle={styles.listContent}
+                    ListEmptyComponent={renderEmpty}
+                    refreshControl={
+                        <RefreshControl refreshing={loading} onRefresh={refresh} />
+                    }
+                />
+            )}
+
+            {/* Add Button */}
             <TouchableOpacity
-                style={[styles.button, {backgroundColor: '#007AFF'}]}
-                onPress={() => router.push('/(tabs)/live-tracking')}
+                style={styles.fab}
+                onPress={() => router.push('/new-alarm')}
             >
-                <Text style={styles.buttonText}>📡 Live Movement Tracker</Text>
+                <Text style={styles.fabIcon}>+</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-                style={[styles.button, {backgroundColor: '#34C759'}]}
-                onPress={() => router.push('/(tabs)/destination-tracking')}
-            >
-                <Text style={styles.buttonText}>🎯 Track Distance to Destination</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-                style={[styles.button, {backgroundColor: '#FF3B30'}]}
-                onPress={() => router.push('/(tabs)/location-alarm')}
-            >
-                <Text style={styles.buttonText}>⏰ Destination Alarm</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-                style={[styles.button, {backgroundColor: '#FFD60A', marginTop: 10}]}
-                onPress={() => router.push('/(tabs)/settings')}
-            >
-                <Text style={styles.buttonText}>⚙️ Settings</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-                style={[styles.button, { backgroundColor: '#007AFF', marginTop: 10 }]}
-                onPress={() => router.push('/(tabs)/new-alarm')}
-            >
-                <Text style={styles.buttonText}>➕ Add New Alarm</Text>
-            </TouchableOpacity>
-
-            <Text style={styles.title} >⏰ Saved Destination Alarms</Text>
-
-            <ScrollView>
-                {alarms.map(a => (
-                    <View
-                        key={a.id}
-                        style={{
-                            backgroundColor: '#f9fafb',
-                            padding: 15,
-                            borderRadius: 12,
-                            marginVertical: 8,
-                            shadowColor: '#000',
-                            shadowOpacity: 0.1,
-                            shadowRadius: 4,
-                        }}
-                    >
-                        <Text style={{fontWeight: '600', fontSize: 16}}>{a.title}</Text>
-                        <Text style={{color: '#666'}}>
-                            {a.coords.latitude.toFixed(3)}, {a.coords.longitude.toFixed(3)}
-                        </Text>
-                        <Text>🔔 {a.tone}</Text>
-
-                        <View style={{flexDirection: 'row', marginTop: 10, justifyContent: 'space-between'}}>
-                            <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                                <Text>Active</Text>
-                                <Switch value={a.active} onValueChange={() => toggleActive(a.id)} />
-                            </View>
-
-                            <View style={{flexDirection: 'row', gap: 10}}>
-                                <TouchableOpacity
-                                    style={[styles.button, {backgroundColor: '#007AFF', paddingHorizontal: 10}]}
-                                    onPress={() => router.push({pathname: '/new-alarm', params: {editId: a.id}})}
-                                >
-                                    <Text style={{color: 'white'}}>✏️ Edit</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={[styles.button, {backgroundColor: '#FF3B30', paddingHorizontal: 10}]}
-                                    onPress={() => deleteAlarm(a.id)}
-                                >
-                                    <Text style={{color: 'white'}}>🗑 Delete</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                    </View>
-                ))}
-
-                <TouchableOpacity
-                    style={[styles.button, {backgroundColor: '#34C759', marginTop: 20}]}
-                    onPress={() => router.push('/new-alarm')}
-                >
-                    <Text style={styles.buttonText}>➕ Add New Alarm</Text>
-                </TouchableOpacity>
-            </ScrollView>
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: '#f3f4f6',
+    },
+    header: {
+        backgroundColor: '#ffffff',
+        padding: 20,
+        paddingTop: 60,
+        borderBottomWidth: 1,
+        borderBottomColor: '#e5e7eb',
+    },
+    title: {
+        fontSize: 28,
+        fontWeight: '800',
+        color: '#1f2937',
+        marginBottom: 4,
+    },
+    subtitle: {
+        fontSize: 14,
+        color: '#6b7280',
+    },
+    errorBanner: {
+        backgroundColor: '#fee2e2',
+        padding: 12,
+        marginHorizontal: 16,
+        marginTop: 16,
+        borderRadius: 8,
+    },
+    errorText: {
+        color: '#991b1b',
+        fontSize: 14,
+    },
+    listContent: {
+        padding: 16,
+        paddingBottom: 100,
+    },
+    loader: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    empty: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 60,
+    },
+    emptyIcon: {
+        fontSize: 80,
+        marginBottom: 16,
+    },
+    emptyTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#374151',
+        marginBottom: 8,
+    },
+    emptyText: {
+        fontSize: 14,
+        color: '#6b7280',
+        textAlign: 'center',
+        paddingHorizontal: 40,
+    },
+    fab: {
+        position: 'absolute',
+        bottom: 30,
+        right: 30,
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        backgroundColor: '#3b82f6',
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+        elevation: 8,
+    },
+    fabIcon: {
+        fontSize: 32,
+        color: '#ffffff',
+        fontWeight: '300',
+    },
+});

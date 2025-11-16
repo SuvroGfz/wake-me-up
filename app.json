@@ -10,20 +10,20 @@
     "newArchEnabled": true,
     "platforms": [
       "android",
-      "ios",
-      "web"
+      "ios"
     ],
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "App uses your location to trigger alarms.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "App needs your location in the background to trigger alarms.",
+        "NSLocationWhenInUseUsageDescription": "We need your location to trigger alarms when you reach destinations.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "We need background location access to trigger alarms even when the app is closed.",
+        "NSLocationAlwaysUsageDescription": "We need background location access to trigger alarms even when the app is closed.",
         "UIBackgroundModes": [
           "location",
-          "fetch",
           "audio"
         ]
-      }
+      },
+      "bundleIdentifier": "com.suvro.wakemeup"
     },
     "android": {
       "versionCode": 1,
@@ -32,7 +32,11 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
-        "FOREGROUND_SERVICE"
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "POST_NOTIFICATIONS",
+        "WAKE_LOCK",
+        "VIBRATE"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -42,10 +46,6 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
-    },
-    "web": {
-      "output": "static",
-      "favicon": "./assets/images/wake-me-up.png"
     },
     "plugins": [
       "expo-router",
@@ -61,7 +61,29 @@
           }
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow WakeMeUp to use your location to trigger destination alarms.",
+          "locationAlwaysPermission": "Allow WakeMeUp to use your location in the background to trigger alarms.",
+          "locationWhenInUsePermission": "Allow WakeMeUp to use your location to set up alarms.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#dc2626",
+          "sounds": [
+            "./assets/audio/alarm-tones/alarm1.mp3",
+            "./assets/audio/alarm-tones/alarm2.wav",
+            "./assets/audio/alarm-tones/alarm3.mp3"
+          ],
+          "mode": "production"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

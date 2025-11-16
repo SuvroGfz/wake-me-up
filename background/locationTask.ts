@@ -1,96 +1,82 @@
 // background/locationTask.ts
 import * as TaskManager from 'expo-task-manager';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
-import { getDistance } from 'geolib';
-import { LOCATION_TASK_NAME, ALARMS_KEY, ALARM_TRIGGERED_KEY, PROXIMITY_THRESHOLD_METERS } from '@/constants/values';
+import { loadAlarms, isAlarmTriggered } from '@/services/alarmService';
+import { calculateDistance } from '@/services/locationService';
+import { triggerAlarm } from '@/services/alarmManagerService';
+import { LOCATION_TASK_NAME, PROXIMITY_THRESHOLD_METERS } from '@/constants/values';
 
-type StoredLog = {
-    timestamp: string;
-    latitude: number;
-    longitude: number;
-    accuracy?: number;
-};
-
+/**
+ * Background location tracking task
+ * This runs even when app is closed/backgrounded
+ */
 TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
     try {
         if (error) {
-            console.error('[LOCATION_TASK] error', error);
+            console.error('[LocationTask] Error:', error);
             return;
         }
-        if (!data) return;
 
-        const { locations } = data as any;
-        if (!locations || !locations.length) return;
-
-        // Save raw location logs (optional)
-        try {
-            const raw = await AsyncStorage.getItem('@myapp:location_logs');
-            const existing: StoredLog[] = raw ? JSON.parse(raw) : [];
-            const newEntries: StoredLog[] = locations.map((l: any) => ({
-                timestamp: new Date().toISOString(),
-                latitude: l.coords.latitude,
-                longitude: l.coords.longitude,
-                accuracy: l.coords.accuracy,
-            }));
-            const merged = [...newEntries, ...existing].slice(0, 2000);
-            await AsyncStorage.setItem('@myapp:location_logs', JSON.stringify(merged));
-        } catch (e) {
-            console.warn('[LOCATION_TASK] could not save logs', e);
+        if (!data) {
+            console.warn('[LocationTask] No data received');
+            return;
         }
 
-        // For each location point, check alarms
-        const alarmsRaw = await AsyncStorage.getItem(ALARMS_KEY);
-        const alarms = alarmsRaw ? JSON.parse(alarmsRaw) : [];
+        const { locations } = data as any;
 
-        if (!alarms || alarms.length === 0) return;
+        if (!locations || locations.length === 0) {
+            console.warn('[LocationTask] No locations in data');
+            return;
+        }
 
-        // triggered map to avoid repeat notifications
-        const triggeredRaw = await AsyncStorage.getItem(ALARM_TRIGGERED_KEY);
-        const triggeredMap: Record<string, string> = triggeredRaw ? JSON.parse(triggeredRaw) : {};
+        // Get all active alarms
+        const alarms = await loadAlarms();
+        const activeAlarms = alarms.filter((a) => a.active);
 
-        // Loop over latest location(s)
-        for (const loc of locations) {
-            const lat = loc.coords.latitude;
-            const lon = loc.coords.longitude;
+        if (activeAlarms.length === 0) {
+            return;
+        }
 
-            for (const alarm of alarms) {
+        // Check each location update
+        for (const location of locations) {
+            const currentCoords = {
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+            };
+
+            // Check each active alarm
+            for (const alarm of activeAlarms) {
                 try {
-                    if (!alarm.active) continue;
-                    // if already triggered recently, skip
-                    if (triggeredMap[alarm.id]) continue;
+                    // Skip if already triggered
+                    const wasTriggered = await isAlarmTriggered(alarm.id);
+                    if (wasTriggered) continue;
 
-                    const dist = getDistance(
-                        { latitude: lat, longitude: lon },
-                        { latitude: alarm.coords.latitude, longitude: alarm.coords.longitude }
+                    // Calculate distance
+                    const distance = calculateDistance(currentCoords, alarm.coords);
+
+                    console.log(
+                        `[LocationTask] Alarm "${alarm.title}": ${distance}m away (threshold: ${PROXIMITY_THRESHOLD_METERS}m)`
                     );
 
-                    if (dist <= PROXIMITY_THRESHOLD_METERS) {
-                        // Mark as triggered
-                        triggeredMap[alarm.id] = new Date().toISOString();
-                        await AsyncStorage.setItem(ALARM_TRIGGERED_KEY, JSON.stringify(triggeredMap));
+                    // Check if within threshold
+                    if (distance <= PROXIMITY_THRESHOLD_METERS) {
+                        console.log(`[LocationTask] 🚨 ALARM TRIGGERED: ${alarm.title}`);
 
-                        // Schedule a local notification immediately
-                        // Note: sound uses 'default' here. Custom sound needs native setup.
-                        await Notifications.scheduleNotificationAsync({
-                            content: {
-                                title: alarm.title || 'Destination reached',
-                                body: `You are within ${Math.round(dist)} meters of ${alarm.title || 'your destination'}.`,
-                                data: { alarmId: alarm.id },
-                                // sound: 'default' // default sound; custom sound needs native channel
-                            },
-                            trigger: null,
-                        });
-
-                        // Optionally: set alarm.active = false to prevent future, then write back:
-                        // alarm.active = false; // if you want single-shot alarms
+                        // Trigger alarm (sound + notification + popup)
+                        await triggerAlarm(alarm.id);
                     }
-                } catch (inner) {
-                    console.warn('[LOCATION_TASK] alarm check error', inner);
+                } catch (innerError) {
+                    console.error(`[LocationTask] Error checking alarm ${alarm.id}:`, innerError);
                 }
             }
         }
     } catch (err) {
-        console.error('[LOCATION_TASK] exception', err);
+        console.error('[LocationTask] Fatal error:', err);
     }
 });
+
+/**
+ * Check if location task is registered
+ */
+export const isLocationTaskDefined = (): boolean => {
+    return TaskManager.isTaskDefined(LOCATION_TASK_NAME);
+};
