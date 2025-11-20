@@ -16,6 +16,7 @@ export const useAlarms = () => {
         setError(null);
         try {
             const data = await loadAlarms();
+            console.log("loaded alarms: ", data)
             setAlarms(data);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to load alarms');
@@ -31,9 +32,12 @@ export const useAlarms = () => {
     const toggle = useCallback(async (id: string) => {
         try {
             const newState = await toggleAlarmActive(id);
-            setAlarms((prev) =>
-                prev.map((a) => (a.id === id ? {...a, active: newState} : a))
+            setAlarms(prev =>
+                prev.map(a =>
+                    a.id === id ? { ...a, active: newState, color: newState ? 'green' : 'red' } : a
+                )
             );
+
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to toggle alarm');
             console.error('[useAlarms] Toggle error:', err);

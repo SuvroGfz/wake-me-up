@@ -31,13 +31,14 @@ export const saveAlarms = async (alarms: Alarm[]): Promise<void> => {
 /**
  * Add a new alarm
  */
-export const addAlarm = async (
-    title: string,
-    coords: Coordinates,
-    tone: AlarmTone
-): Promise<Alarm> => {
+export const addAlarm = async (title, coords, tone, customToneUri = null) => {
     const alarms = await loadAlarms();
     const newAlarm = createAlarm(title, coords, tone);
+
+    newAlarm.customToneUri = customToneUri;
+    newAlarm.vibrate = true;
+    newAlarm.color = 'green';
+
     alarms.push(newAlarm);
     await saveAlarms(alarms);
     return newAlarm;

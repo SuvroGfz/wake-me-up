@@ -15,17 +15,20 @@ export interface Alarm {
     active: boolean;
     createdAt: string;
     triggeredAt?: string;
+    // NEW FIELDS
+    customToneUri?: string | null;       // file:// or content:// tone
+    vibrate?: boolean;            // vibration enabled
+    color?: 'green' | 'red';      // map display color
 }
 
-export const createAlarm = (
-    title: string,
-    coords: Coordinates,
-    tone: AlarmTone
-): Alarm => ({
+export const createAlarm = (title, coords, tone): Alarm => ({
     id: `alarm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     title,
     coords,
     tone,
+    customToneUri: null,     // NEW
+    vibrate: true,           // NEW
+    color: 'green',          // NEW
     active: true,
     createdAt: new Date().toISOString(),
 });

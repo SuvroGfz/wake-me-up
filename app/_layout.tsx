@@ -5,6 +5,7 @@ import * as Notifications from 'expo-notifications';
 import { AppState, AppStateStatus } from 'react-native';
 import { startBackgroundLocationTracking } from '@/background/startLocationTracking';
 import { initAudioMode } from '@/services/audioService';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import {
     setupNotificationChannel,
     setupNotificationCategories
@@ -12,6 +13,16 @@ import {
 import { stopAlarm, getActiveAlarmId } from '@/services/alarmManagerService';
 import { STOP_ALARM_ACTION } from '@/constants/values';
 import '@/background/locationTask'; // Register the background task
+
+import { DeviceEventEmitter, Platform } from 'react-native';
+import { handleHardwareButton } from '@/services/alarmManagerService';
+
+if (Platform.OS === 'android') {
+    DeviceEventEmitter.addListener('hardwareButtonPress', async (keyCode: number) => {
+        // call the exported handler to stop alarm
+        await handleHardwareButton();
+    });
+}
 
 /**
  * Configure notification handler
@@ -105,23 +116,27 @@ export default function RootLayout() {
     }, [appState, router]);
 
     return (
-        <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen
-                name="new-alarm"
-                options={{
-                    presentation: 'modal',
-                    headerShown: false,
-                }}
-            />
-            <Stack.Screen
-                name="alarm-triggered"
-                options={{
-                    presentation: 'fullScreenModal',
-                    headerShown: false,
-                    gestureEnabled: false, // Prevent swipe to dismiss
-                }}
-            />
-        </Stack>
+        <SafeAreaProvider>
+            <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+                <Stack screenOptions={{ headerShown: false }}>
+                    <Stack.Screen name="(tabs)" />
+                    <Stack.Screen
+                        name="new-alarm"
+                        options={{
+                            presentation: 'modal',
+                            headerShown: false,
+                        }}
+                    />
+                    <Stack.Screen
+                        name="alarm-triggered"
+                        options={{
+                            presentation: 'fullScreenModal',
+                            headerShown: false,
+                            gestureEnabled: false,
+                        }}
+                    />
+                </Stack>
+            </SafeAreaView>
+        </SafeAreaProvider>
     );
 }

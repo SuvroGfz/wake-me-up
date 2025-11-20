@@ -5,6 +5,8 @@ import { calculateDistance } from '@/services/locationService';
 import { triggerAlarm } from '@/services/alarmManagerService';
 import { LOCATION_TASK_NAME, PROXIMITY_THRESHOLD_METERS } from '@/constants/values';
 
+import * as KeepAwake from 'expo-keep-awake';
+
 /**
  * Background location tracking task
  * This runs even when app is closed/backgrounded
@@ -62,6 +64,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
                         console.log(`[LocationTask] 🚨 ALARM TRIGGERED: ${alarm.title}`);
 
                         // Trigger alarm (sound + notification + popup)
+                        await KeepAwake.activateKeepAwakeAsync('locationAlarm');
                         await triggerAlarm(alarm.id);
                     }
                 } catch (innerError) {

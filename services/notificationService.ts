@@ -92,12 +92,18 @@ export const showPersistentAlarmNotification = async (alarm: Alarm): Promise<str
                 type: 'alarm_active',
                 persistent: true,
             },
-            sound: false, // Sound handled by audio service
-            priority: Notifications.AndroidNotificationPriority.MAX,
+            sound: false, // sound handled by audioService
             categoryIdentifier: 'alarm-triggered',
-            sticky: true,
-            autoDismiss: false,
+            // Android-specific options must go under `android` object
+            android: {
+                channelId: ALARM_NOTIFICATION_CHANNEL,
+                priority: Notifications.AndroidNotificationPriority.MAX,
+                sticky: true,       // keep notification visible
+                autoCancel: false,  // do not auto dismiss
+                vibrationPattern: [0, 400, 200, 400], // supplemental — audioService handles vibration, but put for notification drive
+                // Note: full-screen intent not available via expo-notifications JS API
+            }
         },
-        trigger: null,
+        trigger: null
     });
 };

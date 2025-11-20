@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { getAlarmById } from '@/services/alarmService';
-import { stopAlarm, snoozeAlarm } from '@/services/alarmManagerService';
+import { stopAlarm } from '@/services/alarmManagerService';
 import { Alarm } from '@/models/Alarm';
 
 const { width } = Dimensions.get('window');
@@ -80,11 +80,6 @@ export default function AlarmTriggeredScreen() {
 
     const handleStop = async () => {
         await stopAlarm(alarmId);
-        router.back();
-    };
-
-    const handleSnooze = async () => {
-        await snoozeAlarm(alarmId);
         router.back();
     };
 
@@ -160,20 +155,10 @@ export default function AlarmTriggeredScreen() {
                         <Text style={styles.stopButtonText}>🛑 STOP ALARM</Text>
                         <Text style={styles.buttonSubtext}>(Turns off alarm)</Text>
                     </TouchableOpacity>
-
-                    {/* Snooze Button (Keeps alarm active) */}
-                    <TouchableOpacity
-                        style={[styles.actionButton, styles.snoozeButton]}
-                        onPress={handleSnooze}
-                    >
-                        <Text style={styles.snoozeButtonText}>⏰ SNOOZE</Text>
-                        <Text style={styles.buttonSubtext}>(Stays active)</Text>
-                    </TouchableOpacity>
                 </View>
 
                 <Text style={styles.hint}>
                     Stop: Turns off alarm until you enable it again{'\n'}
-                    Snooze: Silences for now, will ring again if you return
                 </Text>
             </View>
         </View>
@@ -279,21 +264,10 @@ const styles = StyleSheet.create({
     stopButton: {
         backgroundColor: '#ffffff',
     },
-    snoozeButton: {
-        backgroundColor: 'rgba(255, 255, 255, 0.3)',
-        borderWidth: 2,
-        borderColor: '#ffffff',
-    },
     stopButtonText: {
         fontSize: 22,
         fontWeight: '900',
         color: '#dc2626',
-        letterSpacing: 1,
-    },
-    snoozeButtonText: {
-        fontSize: 20,
-        fontWeight: '800',
-        color: '#ffffff',
         letterSpacing: 1,
     },
     buttonSubtext: {

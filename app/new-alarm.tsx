@@ -14,8 +14,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import MapPicker from '@/components/map/MapPicker';
 import { addAlarm, getAlarmById, updateAlarm } from '@/services/alarmService';
-import { AlarmTone } from '@/models/Alarm';
-import { Coordinates } from '@/models/Alarm';
+import { AlarmTone, Coordinates } from '@/models/Alarm';
 import { alarmToneLabels } from '@/assets/audio/alarm-tones';
 
 export default function NewAlarmScreen() {
@@ -25,30 +24,29 @@ export default function NewAlarmScreen() {
 
     const [title, setTitle] = useState('');
     const [selectedCoords, setSelectedCoords] = useState<Coordinates | null>(null);
+    const [manualInput, setManualInput] = useState('');
     const [selectedTone, setSelectedTone] = useState<AlarmTone>('alarm1');
     const [mapVisible, setMapVisible] = useState(false);
     const [loading, setLoading] = useState(false);
     const [initialLoading, setInitialLoading] = useState(!!editId);
 
-    // Load existing alarm data if editing
+    // Load alarm in edit mode
     useEffect(() => {
-        if (editId) {
-            loadAlarmData(editId);
-        }
+        if (editId) loadAlarmData(editId);
     }, [editId]);
 
     const loadAlarmData = async (id: string) => {
         try {
             const alarm = await getAlarmById(id);
-            if (alarm) {
-                setTitle(alarm.title);
-                setSelectedCoords(alarm.coords);
-                setSelectedTone(alarm.tone);
-            } else {
+            if (!alarm) {
                 Alert.alert('Error', 'Alarm not found');
                 router.back();
+                return;
             }
-        } catch (error) {
+            setTitle(alarm.title);
+            setSelectedCoords(alarm.coords);
+            setSelectedTone(alarm.tone);
+        } catch (e) {
             Alert.alert('Error', 'Failed to load alarm');
             router.back();
         } finally {
@@ -61,6 +59,25 @@ export default function NewAlarmScreen() {
         setMapVisible(false);
     };
 
+    const handleManualSubmit = () => {
+        if (!manualInput.trim()) {
+            Alert.alert('Missing Coordinates', 'Please enter coordinates first.');
+            return;
+        }
+
+        const [latStr, lngStr] = manualInput.split(',');
+        const lat = Number(latStr);
+        const lng = Number(lngStr);
+
+        if (isNaN(lat) || isNaN(lng)) {
+            Alert.alert('Invalid Coordinates', 'Enter values like: 40.7128,-74.0060');
+            return;
+        }
+
+        setSelectedCoords({ latitude: lat, longitude: lng });
+        Alert.alert('Coordinates Set', 'Using manual coordinates.');
+    };
+
     const handleSave = async () => {
         if (!title.trim()) {
             Alert.alert('Missing Title', 'Please enter an alarm title');
@@ -68,7 +85,7 @@ export default function NewAlarmScreen() {
         }
 
         if (!selectedCoords) {
-            Alert.alert('Missing Location', 'Please select a destination on the map');
+            Alert.alert('Missing Location', 'Please select a destination or enter coordinates');
             return;
         }
 
@@ -76,7 +93,6 @@ export default function NewAlarmScreen() {
 
         try {
             if (editId) {
-                // Update existing alarm
                 await updateAlarm(editId, {
                     title: title.trim(),
                     coords: selectedCoords,
@@ -84,12 +100,11 @@ export default function NewAlarmScreen() {
                 });
                 Alert.alert('Success', 'Alarm updated successfully');
             } else {
-                // Create new alarm
                 await addAlarm(title.trim(), selectedCoords, selectedTone);
                 Alert.alert('Success', 'Alarm created successfully');
             }
             router.back();
-        } catch (error) {
+        } catch (e) {
             Alert.alert('Error', 'Failed to save alarm');
         } finally {
             setLoading(false);
@@ -129,6 +144,8 @@ export default function NewAlarmScreen() {
                 {/* Location Selection */}
                 <View style={styles.section}>
                     <Text style={styles.label}>Destination Location</Text>
+
+                    {/* Selected Coordinates Display ALWAYS visible if coords exist */}
                     {selectedCoords ? (
                         <View style={styles.coordsDisplay}>
                             <Text style={styles.coordsText}>
@@ -136,8 +153,32 @@ export default function NewAlarmScreen() {
                             </Text>
                         </View>
                     ) : (
-                        <Text style={styles.hint}>No location selected</Text>
+                        <Text style={styles.hint}>No location selected yet</Text>
                     )}
+
+                    {/* Manual Input Section (Below selected coords) */}
+                    <View style={{ marginTop: 10 }}>
+                        <Text style={{ fontSize: 14, marginBottom: 6 }}>
+                            Or enter coordinates manually:
+                        </Text>
+
+                        <TextInput
+                            placeholder="Lat,Lng   e.g. 40.7128,-74.0060"
+                            style={styles.manualInput}
+                            value={manualInput}
+                            onChangeText={setManualInput}
+                            onSubmitEditing={handleManualSubmit}
+                        />
+
+                        <TouchableOpacity
+                            style={[styles.button, { backgroundColor: '#6b7280' }]}
+                            onPress={handleManualSubmit}
+                        >
+                            <Text style={styles.buttonText}>Use These Coordinates</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Open Map Picker */}
                     <TouchableOpacity
                         style={[styles.button, styles.mapButton]}
                         onPress={() => setMapVisible(true)}
@@ -179,7 +220,7 @@ export default function NewAlarmScreen() {
                     disabled={loading}
                 >
                     {loading ? (
-                        <ActivityIndicator color="#ffffff" />
+                        <ActivityIndicator color="#fff" />
                     ) : (
                         <Text style={styles.buttonText}>
                             {editId ? '✅ Update Alarm' : '✅ Create Alarm'}
@@ -202,16 +243,12 @@ export default function NewAlarmScreen() {
     );
 }
 
+/* ------------------------- STYLES ------------------------- */
+
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#f3f4f6',
-    },
-    loader: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
+    container: { flex: 1, backgroundColor: '#f3f4f6' },
+    loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+
     header: {
         backgroundColor: '#ffffff',
         paddingTop: 50,
@@ -220,31 +257,15 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#e5e7eb',
     },
-    backButton: {
-        marginBottom: 8,
-    },
-    backText: {
-        fontSize: 16,
-        color: '#3b82f6',
-    },
-    title: {
-        fontSize: 28,
-        fontWeight: '800',
-        color: '#1f2937',
-    },
-    content: {
-        flex: 1,
-        padding: 20,
-    },
-    section: {
-        marginBottom: 24,
-    },
-    label: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#374151',
-        marginBottom: 8,
-    },
+    backButton: { marginBottom: 8 },
+    backText: { fontSize: 16, color: '#3b82f6' },
+    title: { fontSize: 28, fontWeight: '800', color: '#1f2937' },
+
+    content: { flex: 1, padding: 20 },
+
+    section: { marginBottom: 24 },
+    label: { fontSize: 16, fontWeight: '600', color: '#374151', marginBottom: 8 },
+
     input: {
         backgroundColor: '#ffffff',
         borderWidth: 1,
@@ -254,11 +275,21 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#1f2937',
     },
-    hint: {
-        fontSize: 14,
-        color: '#9ca3af',
-        marginBottom: 8,
+
+    manualInput: {
+        backgroundColor: '#ffffff',
+        borderWidth: 1,
+        borderColor: '#d1d5db',
+        borderRadius: 12,
+        padding: 14,
+        fontSize: 16,
+        color: '#1f2937',
+        marginBottom: 10,
+        fontFamily: 'monospace',
     },
+
+    hint: { fontSize: 14, color: '#9ca3af', marginBottom: 8 },
+
     coordsDisplay: {
         backgroundColor: '#e0f2fe',
         padding: 12,
@@ -270,6 +301,7 @@ const styles = StyleSheet.create({
         color: '#075985',
         fontFamily: 'monospace',
     },
+
     toneOption: {
         backgroundColor: '#ffffff',
         borderWidth: 1,
@@ -283,37 +315,13 @@ const styles = StyleSheet.create({
         borderColor: '#3b82f6',
         borderWidth: 2,
     },
-    toneText: {
-        fontSize: 16,
-        color: '#374151',
-    },
-    toneTextSelected: {
-        color: '#1e40af',
-        fontWeight: '600',
-    },
-    button: {
-        padding: 16,
-        borderRadius: 12,
-        alignItems: 'center',
-    },
-    mapButton: {
-        backgroundColor: '#3b82f6',
-    },
-    saveButton: {
-        backgroundColor: '#10b981',
-        marginTop: 8,
-        marginBottom: 40,
-    },
-    closeButton: {
-        backgroundColor: '#ef4444',
-        margin: 20,
-    },
-    buttonDisabled: {
-        opacity: 0.5,
-    },
-    buttonText: {
-        color: '#ffffff',
-        fontSize: 16,
-        fontWeight: '700',
-    },
+    toneText: { fontSize: 16, color: '#374151' },
+    toneTextSelected: { color: '#1e40af', fontWeight: '600' },
+
+    button: { padding: 16, borderRadius: 12, alignItems: 'center' },
+    mapButton: { backgroundColor: '#3b82f6', marginTop: 12 },
+    saveButton: { backgroundColor: '#10b981', marginTop: 8, marginBottom: 40 },
+    closeButton: { backgroundColor: '#ef4444', margin: 20 },
+    buttonDisabled: { opacity: 0.5 },
+    buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
 });

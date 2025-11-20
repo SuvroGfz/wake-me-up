@@ -10,7 +10,7 @@ export const ACTIVE_ALARM_KEY = '@active_alarm_id'; // Currently ringing alarm
 export const LOCATION_TASK_NAME = 'BACKGROUND_LOCATION_TRACKING';
 
 // Alarm Settings
-export const PROXIMITY_THRESHOLD_METERS = 20; // Trigger alarm within 20 meters
+export const PROXIMITY_THRESHOLD_METERS = 30; // Trigger alarm within 20 meters
 export const MIN_DISTANCE_INTERVAL = 10; // Update location every 10 meters
 export const LOCATION_UPDATE_INTERVAL = 5000; // Check location every 5 seconds
 

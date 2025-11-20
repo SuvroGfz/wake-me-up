@@ -1,10 +1,8 @@
 // services/alarmManagerService.ts
+// replace imports at top to include Alarm type and audio changes
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-    getAlarmById,
-    updateAlarm,
-    markAlarmTriggered
-} from '@/services/alarmService';
+import { Alarm } from '@/models/Alarm';
+import { getAlarmById, updateAlarm, markAlarmTriggered } from '@/services/alarmService';
 import { playAlarmSound, stopAlarmSound } from '@/services/audioService';
 import {
     sendAlarmNotification,
@@ -13,9 +11,18 @@ import {
 } from '@/services/notificationService';
 import { ACTIVE_ALARM_KEY } from '@/constants/values';
 
+
+import * as Haptics from 'expo-haptics';
+import { EventEmitter } from 'expo-modules-core';
+
+
 /**
  * Trigger an alarm (sound + notification + popup)
  */
+
+const volumeEmitter = new EventEmitter();
+let volumeStopEnabled = false;
+
 export const triggerAlarm = async (alarmId: string): Promise<boolean> => {
     try {
         const alarm = await getAlarmById(alarmId);
@@ -31,14 +38,15 @@ export const triggerAlarm = async (alarmId: string): Promise<boolean> => {
         // Save as currently active alarm
         await AsyncStorage.setItem(ACTIVE_ALARM_KEY, alarmId);
 
-        // Play alarm sound
-        await playAlarmSound(alarm.tone);
+        // Play alarm sound (now pass full alarm)
+        await playAlarmSound(alarm);
 
-        // Send initial notification
+        // Send initial notification and persistent notification
         await sendAlarmNotification(alarm);
-
-        // Show persistent notification
         await showPersistentAlarmNotification(alarm);
+
+        // Enable hardware-volume-to-stop behavior while alarm rings
+        volumeStopEnabled = true;
 
         console.log('[AlarmManager] ✅ Alarm triggered:', alarm.title);
         return true;
@@ -53,7 +61,6 @@ export const triggerAlarm = async (alarmId: string): Promise<boolean> => {
  */
 export const stopAlarm = async (alarmId?: string): Promise<boolean> => {
     try {
-        // Get active alarm ID
         const activeId = alarmId || await AsyncStorage.getItem(ACTIVE_ALARM_KEY);
 
         if (!activeId) {
@@ -61,7 +68,7 @@ export const stopAlarm = async (alarmId?: string): Promise<boolean> => {
             return false;
         }
 
-        // Stop sound
+        // Stop audio + vibration
         await stopAlarmSound();
 
         // Clear active alarm
@@ -70,8 +77,11 @@ export const stopAlarm = async (alarmId?: string): Promise<boolean> => {
         // Disable the alarm so it doesn't trigger again immediately
         await updateAlarm(activeId, { active: false });
 
-        // Cancel all notifications
+        // Cancel notifications
         await cancelAllNotifications();
+
+        // disable hardware stop gate
+        volumeStopEnabled = false;
 
         console.log('[AlarmManager] ✅ Alarm stopped:', activeId);
         return true;
@@ -102,24 +112,16 @@ export const isAlarmRinging = async (): Promise<boolean> => {
 };
 
 /**
- * Snooze alarm (stop for now, keep active)
+ * Called by a native listener when volume/power keys are pressed.
+ * If an alarm is currently ringing (volumeStopEnabled), this will stop it immediately.
+ * (See native/bridge instructions below.)
  */
-export const snoozeAlarm = async (alarmId: string): Promise<boolean> => {
+export const handleHardwareButton = async (): Promise<void> => {
     try {
-        // Stop sound
-        await stopAlarmSound();
-
-        // Clear active alarm
-        await AsyncStorage.removeItem(ACTIVE_ALARM_KEY);
-
-        // Cancel notifications
-        await cancelAllNotifications();
-
-        // Keep alarm active (will trigger again if user goes back near location)
-        console.log('[AlarmManager] ⏰ Alarm snoozed:', alarmId);
-        return true;
-    } catch (error) {
-        console.error('[AlarmManager] Failed to snooze alarm:', error);
-        return false;
+        if (volumeStopEnabled) {
+            await stopAlarm();
+        }
+    } catch (err) {
+        console.error('[AlarmManager] handleHardwareButton error:', err);
     }
 };
