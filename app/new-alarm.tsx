@@ -16,6 +16,7 @@ import MapPicker from '@/components/map/MapPicker';
 import { addAlarm, getAlarmById, updateAlarm } from '@/services/alarmService';
 import { AlarmTone, Coordinates } from '@/models/Alarm';
 import { alarmToneLabels } from '@/assets/audio/alarm-tones';
+import { playPreviewTone, stopPreviewTone } from '@/services/audioService';
 
 export default function NewAlarmScreen() {
     const router = useRouter();
@@ -34,6 +35,14 @@ export default function NewAlarmScreen() {
     useEffect(() => {
         if (editId) loadAlarmData(editId);
     }, [editId]);
+
+    useEffect(() => {
+        // Cleanup when leaving screen
+        return () => {
+            stopPreviewTone();
+        };
+    }, []);
+
 
     const loadAlarmData = async (id: string) => {
         try {
@@ -199,7 +208,10 @@ export default function NewAlarmScreen() {
                                 styles.toneOption,
                                 selectedTone === tone && styles.toneOptionSelected,
                             ]}
-                            onPress={() => setSelectedTone(tone)}
+                            onPress={() => {
+                                setSelectedTone(tone)
+                                playPreviewTone(tone);
+                            }}
                         >
                             <Text
                                 style={[

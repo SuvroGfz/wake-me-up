@@ -2,107 +2,68 @@
 import React, { useEffect, useState } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import * as Notifications from 'expo-notifications';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, Platform, DeviceEventEmitter } from 'react-native';
 import { startBackgroundLocationTracking } from '@/background/startLocationTracking';
 import { initAudioMode } from '@/services/audioService';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import {
-    setupNotificationChannel,
-    setupNotificationCategories
-} from '@/services/notificationService';
-import { stopAlarm, getActiveAlarmId } from '@/services/alarmManagerService';
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { setupNotificationChannel, setupNotificationCategories } from '@/services/notificationService';
+import { stopAlarm, getActiveAlarmId, isAlarmRinging, handleHardwareButton } from '@/services/alarmManagerService';
 import { STOP_ALARM_ACTION } from '@/constants/values';
-import '@/background/locationTask'; // Register the background task
-
-import { DeviceEventEmitter, Platform } from 'react-native';
-import { handleHardwareButton } from '@/services/alarmManagerService';
-
-if (Platform.OS === 'android') {
-    DeviceEventEmitter.addListener('hardwareButtonPress', async (keyCode: number) => {
-        // call the exported handler to stop alarm
-        await handleHardwareButton();
-    });
-}
-
-/**
- * Configure notification handler
- */
-Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-    }),
-});
+import '@/background/locationTask'; // Register background task
 
 export default function RootLayout() {
     const router = useRouter();
     const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState);
+    const [currentAlarmId, setCurrentAlarmId] = useState<string | null>(null);
+    const insets = useSafeAreaInsets();
+
+    if (Platform.OS === 'android') {
+        DeviceEventEmitter.addListener('hardwareButtonPress', async () => {
+            await handleHardwareButton();
+        });
+    }
+
+    Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+            shouldShowAlert: true,
+            shouldPlaySound: true,
+            shouldSetBadge: true,
+        }),
+    });
 
     useEffect(() => {
-        const init = async () => {
-            try {
-                // Request notification permissions
-                const { status } = await Notifications.requestPermissionsAsync();
-                if (status !== 'granted') {
-                    console.warn('[App] Notification permission not granted');
-                }
-
-                // Setup notification channel and categories
-                await setupNotificationChannel();
-                await setupNotificationCategories();
-
-                // Initialize audio mode
-                await initAudioMode();
-
-                // Start background location tracking
-                const result = await startBackgroundLocationTracking();
-                if (!result.success) {
-                    console.error('[App] Failed to start tracking:', result.error);
-                }
-
-                console.log('[App] Initialization complete');
-            } catch (error) {
-                console.error('[App] Initialization error:', error);
-            }
-        };
-
-        init();
-    }, []);
-
-    useEffect(() => {
-        // Handle notification taps
         const tapSubscription = Notifications.addNotificationResponseReceivedListener(
             async (response) => {
                 const { actionIdentifier, notification } = response;
                 const data = notification.request.content.data;
 
-                // Handle Stop Alarm button
                 if (actionIdentifier === STOP_ALARM_ACTION) {
                     await stopAlarm(data.alarmId);
+                    setCurrentAlarmId(null);
                     return;
                 }
 
-                // Handle notification tap (open alarm screen)
                 if (data.type === 'location_alarm_triggered' && data.alarmId) {
-                    router.push({
-                        pathname: '/alarm-triggered',
-                        params: { alarmId: data.alarmId },
-                    });
+                    const ringing = await isAlarmRinging();
+                    if (!ringing || currentAlarmId !== data.alarmId) {
+                        setCurrentAlarmId(data.alarmId);
+                        router.push({
+                            pathname: '/alarm-triggered',
+                            params: { alarmId: data.alarmId },
+                        });
+                    }
                 }
             }
         );
-
         return () => tapSubscription.remove();
-    }, [router]);
+    }, [router, currentAlarmId]);
 
     useEffect(() => {
-        // Check if alarm is ringing when app comes to foreground
         const subscription = AppState.addEventListener('change', async (nextAppState) => {
             if (appState.match(/inactive|background/) && nextAppState === 'active') {
                 const activeAlarmId = await getActiveAlarmId();
-                if (activeAlarmId) {
-                    // Alarm is ringing, open alarm screen
+                if (activeAlarmId && currentAlarmId !== activeAlarmId) {
+                    setCurrentAlarmId(activeAlarmId);
                     router.push({
                         pathname: '/alarm-triggered',
                         params: { alarmId: activeAlarmId },
@@ -111,30 +72,35 @@ export default function RootLayout() {
             }
             setAppState(nextAppState);
         });
-
         return () => subscription.remove();
-    }, [appState, router]);
+    }, [appState, router, currentAlarmId]);
+
+    useEffect(() => {
+        const init = async () => {
+            try {
+                const { status } = await Notifications.requestPermissionsAsync();
+                if (status !== 'granted') console.warn('[App] Notification permission not granted');
+
+                await setupNotificationChannel();
+                await setupNotificationCategories();
+                await initAudioMode();
+
+                const result = await startBackgroundLocationTracking();
+                if (!result.success) console.error('[App] Failed to start tracking:', result.error);
+            } catch (error) {
+                console.error('[App] Initialization error:', error);
+            }
+        };
+        init();
+    }, []);
 
     return (
         <SafeAreaProvider>
-            <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+            <SafeAreaView style={{ flex: 1, paddingTop: insets.top, paddingBottom: insets.bottom }}>
                 <Stack screenOptions={{ headerShown: false }}>
                     <Stack.Screen name="(tabs)" />
-                    <Stack.Screen
-                        name="new-alarm"
-                        options={{
-                            presentation: 'modal',
-                            headerShown: false,
-                        }}
-                    />
-                    <Stack.Screen
-                        name="alarm-triggered"
-                        options={{
-                            presentation: 'fullScreenModal',
-                            headerShown: false,
-                            gestureEnabled: false,
-                        }}
-                    />
+                    <Stack.Screen name="new-alarm" options={{ presentation: 'modal', headerShown: false }} />
+                    <Stack.Screen name="alarm-triggered" options={{ presentation: 'fullScreenModal', headerShown: false, gestureEnabled: false }} />
                 </Stack>
             </SafeAreaView>
         </SafeAreaProvider>

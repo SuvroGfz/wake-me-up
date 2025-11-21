@@ -20,12 +20,16 @@ interface Alarm {
 interface MapViewerProps {
     alarms: Alarm[];
     height?: number;
+    onOpenAlarm?: (alarmId: string) => void;
 }
 
-export default function MapViewer({alarms, height = 300}: MapViewerProps) {
+export default function MapViewer({alarms, height = 300, onOpenAlarm}: MapViewerProps) {
     const webviewRef = useRef<WebView | null>(null);
     const [filter, setFilter] = useState<'all' | 'active' | 'disabled'>('all');
     const [userLocation, setUserLocation] = useState<LatLng | null>(null);
+
+    const [hasSnappedOnce, setHasSnappedOnce] = useState(false);
+
 
     const filteredAlarms = alarms.filter((a) => {
         if (filter === 'all') return true;
@@ -51,22 +55,28 @@ export default function MapViewer({alarms, height = 300}: MapViewerProps) {
 
     useEffect(() => {
         fetchLocation(); // initial
-        const interval = setInterval(fetchLocation, 5000); // every 5s
+        const interval = setInterval(fetchLocation, 5000);
         return () => clearInterval(interval);
     }, []);
 
     // ------------------- SNAP TO USER ON INITIAL LOAD -------------------
     useEffect(() => {
-        if (userLocation && webviewRef.current) {
-            // Automatically snap to user location on first load
-            const payload = {
-                current: userLocation,
-                alarms: filteredAlarms.map(a => ({...a, radius: a.radius || PROXIMITY_THRESHOLD_METERS})),
-                command: 'snapUser',
-            };
-            webviewRef.current.postMessage(JSON.stringify(payload));
-        }
-    }, [userLocation]); // run when userLocation first becomes available
+        if (!userLocation || !webviewRef.current) return;
+
+        const payload = {
+            current: userLocation,
+            alarms: filteredAlarms.map(a => ({
+                ...a,
+                radius: a.radius || PROXIMITY_THRESHOLD_METERS,
+            })),
+            command: hasSnappedOnce ? undefined : 'snapUser',
+        };
+
+        webviewRef.current.postMessage(JSON.stringify(payload));
+
+        // Mark that snap has been done
+        if (!hasSnappedOnce) setHasSnappedOnce(true);
+    }, [userLocation]);
 
 
     // ------------------- POST TO WEBVIEW -------------------
@@ -94,7 +104,10 @@ export default function MapViewer({alarms, height = 300}: MapViewerProps) {
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
-html, body, #map { height: 100%; margin: 0; padding: 0; }
+    html, body, #map { height: 100%; margin: 0; padding: 0; }
+    .leaflet-tooltip {
+        pointer-events: none !important;
+    }
 </style>
 </head>
 <body>
@@ -118,7 +131,7 @@ function updateMap(data) {
         radius: 8, 
         color: '#007AFF', 
         fillColor: '#007AFF', 
-        fillOpacity: 0.9 
+        fillOpacity: 0.5 
     }).addTo(map);
 
     // Add temporary tooltip
@@ -165,10 +178,28 @@ function updateMap(data) {
 
     if(!alarmMarkers[a.id]) {
       alarmMarkers[a.id] = L.marker(pos, {
-        title: a.title,
-        riseOnHover: true,
-        icon: L.icon({iconUrl:'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png', iconSize:[25,41], iconAnchor:[12,41]})
-      }).addTo(map).bindPopup(a.title + (a.active?' (Active)':' (Disabled)'));
+      title: a.title,
+      riseOnHover: true,
+      icon: L.icon({
+        iconUrl:'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+        iconSize:[25,41],
+        iconAnchor:[12,41]
+      })
+    })
+    .addTo(map)
+    .on('click', () => {
+        // send message TO REACT NATIVE
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'openAlarm',
+            id: a.id
+        }));
+    })
+    .bindTooltip(a.title + (a.active ? ' (Active)' : ' (Disabled)'), {
+        permanent: true,
+        direction: 'right',
+        offset: [10, 0],
+    });
+
     } else {
       alarmMarkers[a.id].setLatLng(pos);
       alarmMarkers[a.id].setPopupContent(a.title + (a.active?' (Active)':' (Disabled)'));
@@ -235,8 +266,31 @@ window.addEventListener('message', handleMessage);
             </View>
 
             <View style={{flex: 1}}>
-                <WebView ref={webviewRef} originWhitelist={['*']} source={{html}} javaScriptEnabled allowFileAccess
-                         mixedContentMode="always" style={{flex: 1}}/>
+                <WebView
+                    ref={webviewRef}
+                    originWhitelist={['*']}
+                    source={{html}}
+                    javaScriptEnabled
+                    allowFileAccess
+                    mixedContentMode="always"
+                    style={{flex: 1}}
+                    onMessage={e => {
+                        try {
+                            const data = JSON.parse(e.nativeEvent.data);
+                            if (data.type === 'openAlarm') {
+                                console.log("Open alarm:", data.id);
+
+                                // 🔥 Call parent handler if provided
+                                if (onOpenAlarm) {
+                                    onOpenAlarm(data.id);
+                                }
+                            }
+                        } catch (err) {
+                            console.log("Invalid msg", err);
+                        }
+                    }}
+
+                />
 
                 {/* Buttons */}
                 <View style={styles.buttonsContainer}>

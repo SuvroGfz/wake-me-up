@@ -17,10 +17,10 @@ export default function AboutScreen() {
         <ScrollView contentContainerStyle={styles.container}>
             <Text style={styles.title}>About This App</Text>
 
-            <Text style={styles.info}>Developer: Gazi Fardin Zafor Suvro</Text>
-            <Text style={styles.info}>CSE Graduate from BUET, Working as an Associate Software Engineer in a tech MNC</Text>
+            <Text style={styles.info}>Developed by Gazi Fardin Zafor Suvro</Text>
+            <Text style={styles.info}>CSE Graduate from BUET, Working as an Associate Software Engineer</Text>
             <Text style={styles.info}>Email: gazisn870@gmail.com</Text>
-            <Text style={styles.info}>Address: Dhaka, Bangladesh</Text>
+            <Text style={styles.info}>Dhaka, Bangladesh</Text>
 
             <View style={{ marginTop: 20 }}>
                 {links.map((link, index) => (

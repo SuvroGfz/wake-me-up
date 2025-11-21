@@ -1,7 +1,8 @@
+// tabs/map.tsx
 import React, { useCallback } from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
 import MapViewer from '@/components/map/MapViewer';
-import { useFocusEffect } from 'expo-router';
+import {router, useFocusEffect} from 'expo-router';
 import { useAlarms } from '@/hooks/useAlarms';
 
 export default function MapTab() {
@@ -32,5 +33,12 @@ export default function MapTab() {
     }
 
     // Pass the fetched alarms to MapViewer
-    return <MapViewer alarms={alarms} />;
+    return <MapViewer alarms={alarms}
+                  onOpenAlarm={(id) => {
+                      router.push({
+                          pathname: "/",
+                          params: { openAlarmId: id }   // you will use this in Home to scroll/expand
+                      });
+                  }}
+            />;
 }

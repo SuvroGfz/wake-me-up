@@ -2,7 +2,7 @@
   "expo": {
     "name": "WakeMeUp",
     "slug": "wake-me-up",
-    "version": "1.0.1",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/images/wake-me-up.png",
     "scheme": "wakemeupapp",
@@ -36,7 +36,8 @@
         "FOREGROUND_SERVICE_LOCATION",
         "POST_NOTIFICATIONS",
         "WAKE_LOCK",
-        "VIBRATE"
+        "VIBRATE",
+        "SYSTEM_ALERT_WINDOW"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -75,6 +76,7 @@
       [
         "expo-notifications",
         {
+          "icon": "./assets/images/notification-icon.png",
           "color": "#dc2626",
           "sounds": [
             "./assets/audio/alarm-tones/alarm1.mp3",

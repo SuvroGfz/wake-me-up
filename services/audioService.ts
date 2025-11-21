@@ -126,3 +126,63 @@ export const setAlarmVolume = async (volume: number): Promise<void> => {
         console.error('[AudioService] Failed to set volume:', error);
     }
 };
+
+/** -----------------------------
+ * TONE PREVIEW PLAYER
+ * -----------------------------
+ */
+
+let previewSound: Audio.Sound | null = null;
+
+/**
+ * Stop preview tone
+ */
+export const stopPreviewTone = async (): Promise<void> => {
+    try {
+        if (previewSound) {
+            const status = await previewSound.getStatusAsync();
+            if (status?.isLoaded) {
+                await previewSound.stopAsync();
+                await previewSound.unloadAsync();
+            }
+            previewSound = null;
+        }
+    } catch (error) {
+        console.error('[AudioService] Failed to stop preview tone:', error);
+    }
+};
+
+/**
+ * Play a one-time tone preview when selecting alarm tones.
+ */
+export const playPreviewTone = async (tone: AlarmTone): Promise<void> => {
+    try {
+        // stop any previous preview
+        await stopPreviewTone();
+
+        const source = alarmTones[tone]; // local asset
+
+        const { sound } = await Audio.Sound.createAsync(
+            source,
+            {
+                isLooping: false,
+                volume: 0.9,
+                shouldPlay: true,
+            }
+        );
+
+        previewSound = sound;
+
+        await sound.playAsync();
+
+        // auto-clean after completion
+        sound.setOnPlaybackStatusUpdate(async (status) => {
+            if (status.isLoaded && status.didJustFinish) {
+                await stopPreviewTone();
+            }
+        });
+
+    } catch (error) {
+        console.error('[AudioService] Failed to play preview tone:', error);
+    }
+};

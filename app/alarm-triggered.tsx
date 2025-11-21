@@ -130,7 +130,7 @@ export default function AlarmTriggeredScreen() {
 
                 {/* Alarm Info */}
                 <Text style={styles.title}>WAKE UP!</Text>
-                <Text style={styles.subtitle}>You've arrived at</Text>
+                <Text style={styles.subtitle}>You have arrived at</Text>
                 <Text style={styles.alarmTitle}>{alarm.title}</Text>
 
                 <View style={styles.infoBox}>
