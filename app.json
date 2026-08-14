@@ -37,7 +37,9 @@
         "POST_NOTIFICATIONS",
         "WAKE_LOCK",
         "VIBRATE",
-        "SYSTEM_ALERT_WINDOW"
+        "SYSTEM_ALERT_WINDOW",
+        "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+        "android.permission.USE_FULL_SCREEN_INTENT"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -50,6 +52,7 @@
     },
     "plugins": [
       "expo-router",
+      "./app.plugin.js",
       [
         "expo-splash-screen",
         {

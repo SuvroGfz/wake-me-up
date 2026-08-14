@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import * as Notifications from 'expo-notifications';
+import * as SplashScreen from 'expo-splash-screen';
 import { AppState, AppStateStatus, Platform, DeviceEventEmitter } from 'react-native';
 import { startBackgroundLocationTracking } from '@/background/startLocationTracking';
 import { initAudioMode } from '@/services/audioService';
@@ -11,17 +12,24 @@ import { stopAlarm, getActiveAlarmId, isAlarmRinging, handleHardwareButton } fro
 import { STOP_ALARM_ACTION } from '@/constants/values';
 import '@/background/locationTask'; // Register background task
 
+// Prevent auto-hiding so we control when it goes away
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 export default function RootLayout() {
     const router = useRouter();
     const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState);
     const [currentAlarmId, setCurrentAlarmId] = useState<string | null>(null);
     const insets = useSafeAreaInsets();
 
-    if (Platform.OS === 'android') {
-        DeviceEventEmitter.addListener('hardwareButtonPress', async () => {
-            await handleHardwareButton();
-        });
-    }
+    // Hardware button listener (moved into useEffect to prevent leaks)
+    useEffect(() => {
+        if (Platform.OS === 'android') {
+            const sub = DeviceEventEmitter.addListener('hardwareButtonPress', async () => {
+                await handleHardwareButton();
+            });
+            return () => sub.remove();
+        }
+    }, []);
 
     Notifications.setNotificationHandler({
         handleNotification: async () => ({
@@ -89,6 +97,9 @@ export default function RootLayout() {
                 if (!result.success) console.error('[App] Failed to start tracking:', result.error);
             } catch (error) {
                 console.error('[App] Initialization error:', error);
+            } finally {
+                // Always hide splash screen, even if init fails
+                await SplashScreen.hideAsync().catch(() => {});
             }
         };
         init();

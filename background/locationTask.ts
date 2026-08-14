@@ -1,11 +1,10 @@
 // background/locationTask.ts
 import * as TaskManager from 'expo-task-manager';
-import { loadAlarms, isAlarmTriggered } from '@/services/alarmService';
+import { loadAlarms } from '@/services/alarmService';
 import { calculateDistance } from '@/services/locationService';
 import { triggerAlarm } from '@/services/alarmManagerService';
-import { LOCATION_TASK_NAME, PROXIMITY_THRESHOLD_METERS } from '@/constants/values';
-
-import * as KeepAwake from 'expo-keep-awake';
+import { LOCATION_TASK_NAME, PROXIMITY_THRESHOLD_METERS, ALARM_TRIGGERED_KEY } from '@/constants/values';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
  * Background location tracking task
@@ -38,6 +37,15 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
             return;
         }
 
+        // Load ALL triggered statuses once before the loops (1 disk read)
+        let triggeredMap: Record<string, string> = {};
+        try {
+            const raw = await AsyncStorage.getItem(ALARM_TRIGGERED_KEY);
+            if (raw) triggeredMap = JSON.parse(raw);
+        } catch (e) {
+            console.error('[LocationTask] Failed to load triggered statuses', e);
+        }
+
         // Check each location update
         for (const location of locations) {
             const currentCoords = {
@@ -48,9 +56,8 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
             // Check each active alarm
             for (const alarm of activeAlarms) {
                 try {
-                    // Skip if already triggered
-                    const wasTriggered = await isAlarmTriggered(alarm.id);
-                    if (wasTriggered) continue;
+                    // O(1) in-memory lookup instead of disk I/O per iteration
+                    if (triggeredMap[alarm.id]) continue;
 
                     // Calculate distance
                     const distance = calculateDistance(currentCoords, alarm.coords);
@@ -63,8 +70,11 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
                     if (distance <= PROXIMITY_THRESHOLD_METERS) {
                         console.log(`[LocationTask] 🚨 ALARM TRIGGERED: ${alarm.title}`);
 
+                        // Immediately update local map to prevent duplicate triggers
+                        // within this same background execution cycle
+                        triggeredMap[alarm.id] = new Date().toISOString();
+
                         // Trigger alarm (sound + notification + popup)
-                        await KeepAwake.activateKeepAwakeAsync('locationAlarm');
                         await triggerAlarm(alarm.id);
                     }
                 } catch (innerError) {

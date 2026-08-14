@@ -1,5 +1,10 @@
 // services/notificationService.ts
 import * as Notifications from 'expo-notifications';
+import notifee, {
+    AndroidImportance,
+    AndroidCategory,
+    AndroidFlags,
+} from '@notifee/react-native';
 import {Platform} from 'react-native';
 import {Alarm} from '@/models/Alarm';
 import {
@@ -7,8 +12,11 @@ import {
     STOP_ALARM_ACTION
 } from '@/constants/values';
 
+// Notifee channel ID for full-screen alarms
+const NOTIFEE_ALARM_CHANNEL = 'full-screen-alarms';
+
 /**
- * Setup notification channel for Android
+ * Setup notification channel for Android (expo-notifications — used for non-alarm notifications)
  */
 export const setupNotificationChannel = async (): Promise<void> => {
     if (Platform.OS === 'android') {
@@ -43,23 +51,43 @@ export const setupNotificationCategories = async (): Promise<void> => {
 };
 
 /**
- * Send alarm triggered notification
+ * Send alarm triggered notification via Notifee (full-screen intent for lock screen)
  */
 export const sendAlarmNotification = async (alarm: Alarm): Promise<string> => {
-    const notificationId = await Notifications.scheduleNotificationAsync({
-        content: {
-            title: `🚨 ${alarm.title}`,
-            body: `Wake up! You've reached your destination!`,
-            data: {
-                alarmId: alarm.id,
-                type: 'location_alarm_triggered',
-            },
-            sound: true,
-            priority: Notifications.AndroidNotificationPriority.MAX,
-            categoryIdentifier: 'alarm-triggered',
-            sticky: true, // Notification persists until dismissed
+    // Create the Notifee channel (idempotent — safe to call every time)
+    const channelId = await notifee.createChannel({
+        id: NOTIFEE_ALARM_CHANNEL,
+        name: 'Full Screen Alarms',
+        importance: AndroidImportance.HIGH,
+        bypassDnd: true,
+        vibration: true,
+        vibrationPattern: [0, 400, 200, 400],
+        lights: true,
+        lightColor: '#dc2626',
+    });
+
+    const notificationId = await notifee.displayNotification({
+        title: `🚨 ${alarm.title}`,
+        body: `Wake up! You've reached your destination!`,
+        data: {
+            alarmId: alarm.id,
+            type: 'location_alarm_triggered',
         },
-        trigger: null, // Immediate notification
+        android: {
+            channelId,
+            category: AndroidCategory.ALARM,
+            fullScreenAction: {
+                id: 'default',
+                launchActivity: 'default', // Launches MainActivity (with showWhenLocked)
+            },
+            ongoing: true,              // Cannot be swiped away
+            flags: [AndroidFlags.FLAG_INSISTENT],
+            importance: AndroidImportance.HIGH,
+            pressAction: {
+                id: 'default',
+                launchActivity: 'default',
+            },
+        },
     });
 
     return notificationId;
@@ -73,14 +101,15 @@ export const cancelNotification = async (notificationId: string): Promise<void> 
 };
 
 /**
- * Cancel all notifications
+ * Cancel all notifications (both expo-notifications and notifee)
  */
 export const cancelAllNotifications = async (): Promise<void> => {
     await Notifications.dismissAllNotificationsAsync();
+    await notifee.cancelAllNotifications();
 };
 
 /**
- * Schedule a persistent notification for ongoing alarm
+ * Schedule a persistent notification for ongoing alarm (expo-notifications)
  */
 export const showPersistentAlarmNotification = async (alarm: Alarm): Promise<string> => {
     return await Notifications.scheduleNotificationAsync({
@@ -100,8 +129,7 @@ export const showPersistentAlarmNotification = async (alarm: Alarm): Promise<str
                 priority: Notifications.AndroidNotificationPriority.MAX,
                 sticky: true,       // keep notification visible
                 autoCancel: false,  // do not auto dismiss
-                vibrationPattern: [0, 400, 200, 400], // supplemental — audioService handles vibration, but put for notification drive
-                // Note: full-screen intent not available via expo-notifications JS API
+                vibrationPattern: [0, 400, 200, 400], // supplemental — audioService handles vibration
             }
         },
         trigger: null

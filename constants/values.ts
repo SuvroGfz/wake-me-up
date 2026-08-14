@@ -21,3 +21,6 @@ export const ALARM_VOLUME = 1.0;
 // Notification Settings
 export const ALARM_NOTIFICATION_CHANNEL = 'location-alarms';
 export const STOP_ALARM_ACTION = 'STOP_ALARM';
+
+export const LOCATION_TRACKING_INTERVAL_MS = 5000;
+export const BATTERY_SETUP_COMPLETE_KEY = '@battery_setup_complete';

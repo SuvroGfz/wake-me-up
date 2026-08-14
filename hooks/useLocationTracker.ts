@@ -1,5 +1,5 @@
 // hooks/useLocationTracker.ts
-import {useEffect, useState} from 'react';
+import {useEffect, useState, useRef} from 'react';
 import * as Location from 'expo-location';
 import {getDistance} from 'geolib';
 import {Platform} from 'react-native';
@@ -13,34 +13,47 @@ export function useLocationTracker(
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [liveLogs, setLiveLogs] = useState<{ message: string; color?: string }[]>([]);
     const [targetLogs, setTargetLogs] = useState<{ message: string; color?: string }[]>([]);
-    const [lastPosition, setLastPosition] = useState<{ latitude: number; longitude: number } | null>(null);
+
+    // Use refs for values that change frequently to avoid re-running the effect
+    const lastPositionRef = useRef<{ latitude: number; longitude: number } | null>(null);
+    const onStepRef = useRef(onStep);
+    const targetRef = useRef(target);
+
+    // Keep refs current without triggering effect re-runs
+    useEffect(() => { onStepRef.current = onStep; }, [onStep]);
+    useEffect(() => { targetRef.current = target; }, [target]);
 
     const getTimeString = () => new Date().toLocaleTimeString('en-US', {hour12: false});
 
     useEffect(() => {
-        let watcher: Location.LocationSubscription | null = null;
+        let isMounted = true;
+        let watcherSubscription: Location.LocationSubscription | null = null;
+        let webWatchId: number | null = null;
 
         const startTracking = async () => {
             const {status} = await Location.requestForegroundPermissionsAsync();
+            if (!isMounted) return;
             if (status !== 'granted') {
                 setErrorMsg('Permission to access location was denied');
                 return;
             }
 
             const handlePosition = (latitude: number, longitude: number) => {
+                if (!isMounted) return;
+
                 setLocation({latitude, longitude});
 
-                if (target) {
-                    const distToTarget = getDistance({latitude, longitude}, target);
+                if (targetRef.current) {
+                    const distToTarget = getDistance({latitude, longitude}, targetRef.current);
                     setTargetLogs((prev) => [
                         {message: `[${getTimeString()}] Distance to target: ${distToTarget.toFixed(1)} meters.`},
                         ...prev,
                     ]);
                 }
 
-                if (lastPosition) {
+                if (lastPositionRef.current) {
                     const d = getDistance(
-                        {latitude: lastPosition.latitude, longitude: lastPosition.longitude},
+                        {latitude: lastPositionRef.current.latitude, longitude: lastPositionRef.current.longitude},
                         {latitude, longitude}
                     );
                     if (d >= 5) {
@@ -48,41 +61,55 @@ export function useLocationTracker(
                             {message: `[${getTimeString()}] You walked ${d.toFixed(1)} meters from your last position.`},
                             ...prev,
                         ]);
-                        setLastPosition({latitude, longitude});
-                        onStep?.(d);
+                        lastPositionRef.current = {latitude, longitude};
+                        onStepRef.current?.(d);
                     }
                 } else {
                     setLiveLogs((prev) => [
                         {message: `[${getTimeString()}] Come on! Walk Walk. Do not stay still!!`, color: 'red'},
                         ...prev,
                     ]);
-                    setLastPosition({latitude, longitude});
+                    lastPositionRef.current = {latitude, longitude};
                 }
             };
 
             if (Platform.OS === 'web') {
                 if ('geolocation' in navigator) {
-                    const id = navigator.geolocation.watchPosition(
+                    webWatchId = navigator.geolocation.watchPosition(
                         (pos) => handlePosition(pos.coords.latitude, pos.coords.longitude),
-                        (err) => setErrorMsg(err.message),
+                        (err) => { if (isMounted) setErrorMsg(err.message); },
                         {enableHighAccuracy: true, maximumAge: 0, timeout: LOCATION_TRACKING_INTERVAL_MS}
                     );
-                    watcher = {remove: () => navigator.geolocation.clearWatch(id)} as any;
                 } else {
                     setErrorMsg('Geolocation not supported in this browser.');
                 }
-
             } else {
-                watcher = await Location.watchPositionAsync(
+                const sub = await Location.watchPositionAsync(
                     {accuracy: Location.Accuracy.Highest, timeInterval: LOCATION_TRACKING_INTERVAL_MS, distanceInterval: 0},
                     (pos) => handlePosition(pos.coords.latitude, pos.coords.longitude)
                 );
+
+                // If component unmounted while awaiting, kill subscription immediately
+                if (isMounted) {
+                    watcherSubscription = sub;
+                } else {
+                    sub.remove();
+                }
             }
         };
 
         startTracking();
-        return () => watcher?.remove();
-    }, [lastPosition, onStep, target]);
+
+        return () => {
+            isMounted = false;
+            if (watcherSubscription) {
+                watcherSubscription.remove();
+            }
+            if (webWatchId !== null && Platform.OS === 'web') {
+                navigator.geolocation.clearWatch(webWatchId);
+            }
+        };
+    }, []); // Empty dependency array — effect runs exactly once
 
     return {location, errorMsg, liveLogs, targetLogs};
 }

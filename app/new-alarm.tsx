@@ -17,6 +17,8 @@ import { addAlarm, getAlarmById, updateAlarm } from '@/services/alarmService';
 import { AlarmTone, Coordinates } from '@/models/Alarm';
 import { alarmToneLabels } from '@/assets/audio/alarm-tones';
 import { playPreviewTone, stopPreviewTone } from '@/services/audioService';
+import { BatteryOptimizationModal } from '@/components/BatteryOptimizationModal';
+import { hasBatterySetupCompleted } from '@/services/batteryOptimizationService';
 
 export default function NewAlarmScreen() {
     const router = useRouter();
@@ -30,6 +32,7 @@ export default function NewAlarmScreen() {
     const [mapVisible, setMapVisible] = useState(false);
     const [loading, setLoading] = useState(false);
     const [initialLoading, setInitialLoading] = useState(!!editId);
+    const [showBatteryModal, setShowBatteryModal] = useState(false);
 
     // Load alarm in edit mode
     useEffect(() => {
@@ -108,11 +111,18 @@ export default function NewAlarmScreen() {
                     tone: selectedTone,
                 });
                 Alert.alert('Success', 'Alarm updated successfully');
+                router.back();
             } else {
                 await addAlarm(title.trim(), selectedCoords, selectedTone);
-                Alert.alert('Success', 'Alarm created successfully');
+                
+                const isSetupComplete = await hasBatterySetupCompleted();
+                if (!isSetupComplete) {
+                    setShowBatteryModal(true);
+                } else {
+                    Alert.alert('Success', 'Alarm created successfully');
+                    router.back();
+                }
             }
-            router.back();
         } catch (e) {
             Alert.alert('Error', 'Failed to save alarm');
         } finally {
@@ -251,6 +261,15 @@ export default function NewAlarmScreen() {
                     <Text style={styles.buttonText}>✕ Close Map</Text>
                 </TouchableOpacity>
             </Modal>
+
+            <BatteryOptimizationModal 
+                visible={showBatteryModal} 
+                onClose={() => {
+                    setShowBatteryModal(false);
+                    Alert.alert('Success', 'Alarm created successfully');
+                    router.back();
+                }} 
+            />
         </View>
     );
 }
