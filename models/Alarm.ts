@@ -19,6 +19,7 @@ export interface Alarm {
     customToneUri?: string | null;       // file:// or content:// tone
     vibrate?: boolean;            // vibration enabled
     color?: 'green' | 'red';      // map display color
+    activatedAt?: string;         // ISO timestamp of last activation (for cooldown)
 }
 
 export const createAlarm = (title, coords, tone): Alarm => ({
@@ -31,4 +32,5 @@ export const createAlarm = (title, coords, tone): Alarm => ({
     color: 'green',          // NEW
     active: true,
     createdAt: new Date().toISOString(),
+    activatedAt: new Date().toISOString(),
 });

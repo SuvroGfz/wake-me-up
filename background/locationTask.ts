@@ -6,6 +6,10 @@ import { triggerAlarm } from '@/services/alarmManagerService';
 import { LOCATION_TASK_NAME, PROXIMITY_THRESHOLD_METERS, ALARM_TRIGGERED_KEY } from '@/constants/values';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Minimum time (ms) after alarm activation before it can trigger.
+// Prevents instant triggering when alarm is created at current location.
+const ACTIVATION_COOLDOWN_MS = 60_000; // 60 seconds
+
 /**
  * Background location tracking task
  * This runs even when app is closed/backgrounded
@@ -46,40 +50,71 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
             console.error('[LocationTask] Failed to load triggered statuses', e);
         }
 
-        // Check each location update
-        for (const location of locations) {
-            const currentCoords = {
-                latitude: location.coords.latitude,
-                longitude: location.coords.longitude,
-            };
+        let triggeredAny = false;
 
-            // Check each active alarm
-            for (const alarm of activeAlarms) {
-                try {
-                    // O(1) in-memory lookup instead of disk I/O per iteration
-                    if (triggeredMap[alarm.id]) continue;
+        // Use only the most recent location for accuracy
+        const location = locations[locations.length - 1];
+        const currentCoords = {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+        };
 
-                    // Calculate distance
-                    const distance = calculateDistance(currentCoords, alarm.coords);
+        // Check each active alarm
+        for (const alarm of activeAlarms) {
+            try {
+                // Skip already-triggered alarms (in-memory check)
+                if (triggeredMap[alarm.id]) continue;
 
-                    console.log(
-                        `[LocationTask] Alarm "${alarm.title}": ${distance}m away (threshold: ${PROXIMITY_THRESHOLD_METERS}m)`
-                    );
-
-                    // Check if within threshold
-                    if (distance <= PROXIMITY_THRESHOLD_METERS) {
-                        console.log(`[LocationTask] 🚨 ALARM TRIGGERED: ${alarm.title}`);
-
-                        // Immediately update local map to prevent duplicate triggers
-                        // within this same background execution cycle
-                        triggeredMap[alarm.id] = new Date().toISOString();
-
-                        // Trigger alarm (sound + notification + popup)
-                        await triggerAlarm(alarm.id);
+                // Cooldown: skip if alarm was activated/created less than 60s ago
+                const activatedAt = alarm.activatedAt || alarm.createdAt;
+                if (activatedAt) {
+                    const elapsedMs = Date.now() - new Date(activatedAt).getTime();
+                    if (elapsedMs < ACTIVATION_COOLDOWN_MS) {
+                        const remainSec = Math.round((ACTIVATION_COOLDOWN_MS - elapsedMs) / 1000);
+                        console.log(`[LocationTask] Alarm "${alarm.title}": cooldown (${remainSec}s left)`);
+                        continue;
                     }
-                } catch (innerError) {
-                    console.error(`[LocationTask] Error checking alarm ${alarm.id}:`, innerError);
                 }
+
+                // Validate alarm has valid coordinates
+                if (!alarm.coords ||
+                    typeof alarm.coords.latitude !== 'number' ||
+                    typeof alarm.coords.longitude !== 'number' ||
+                    (alarm.coords.latitude === 0 && alarm.coords.longitude === 0)) {
+                    console.warn(`[LocationTask] Alarm "${alarm.title}" has invalid coords, skipping`);
+                    continue;
+                }
+
+                // Calculate distance
+                const distance = calculateDistance(currentCoords, alarm.coords);
+
+                console.log(
+                    `[LocationTask] Alarm "${alarm.title}": ${distance}m away ` +
+                    `(threshold: ${PROXIMITY_THRESHOLD_METERS}m) | ` +
+                    `User: ${currentCoords.latitude.toFixed(6)},${currentCoords.longitude.toFixed(6)} → ` +
+                    `Alarm: ${alarm.coords.latitude.toFixed(6)},${alarm.coords.longitude.toFixed(6)}`
+                );
+
+                // Check if within threshold
+                if (distance <= PROXIMITY_THRESHOLD_METERS) {
+                    console.log(`[LocationTask] 🚨 ALARM TRIGGERED: ${alarm.title}`);
+
+                    // Mark as triggered BEFORE calling triggerAlarm to prevent duplicates
+                    triggeredMap[alarm.id] = new Date().toISOString();
+                    triggeredAny = true;
+
+                    // Persist triggered status immediately
+                    try {
+                        await AsyncStorage.setItem(ALARM_TRIGGERED_KEY, JSON.stringify(triggeredMap));
+                    } catch (e) {
+                        console.error('[LocationTask] Failed to persist triggered status', e);
+                    }
+
+                    // Trigger alarm (sound + notification + popup)
+                    await triggerAlarm(alarm.id);
+                }
+            } catch (innerError) {
+                console.error(`[LocationTask] Error checking alarm ${alarm.id}:`, innerError);
             }
         }
     } catch (err) {

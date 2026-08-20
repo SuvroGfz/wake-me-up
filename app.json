@@ -2,7 +2,7 @@
   "expo": {
     "name": "WakeMeUp",
     "slug": "wake-me-up",
-    "version": "1.0.4",
+    "version": "1.0.7",
     "orientation": "portrait",
     "icon": "./assets/images/wake-me-up.png",
     "scheme": "wakemeupapp",
@@ -26,7 +26,7 @@
       "bundleIdentifier": "com.suvro.wakemeup"
     },
     "android": {
-      "versionCode": 1,
+      "versionCode": 7,
       "package": "suvro.gfz.wakemeup",
       "permissions": [
         "ACCESS_FINE_LOCATION",
@@ -52,6 +52,7 @@
     },
     "plugins": [
       "expo-router",
+      "@maplibre/maplibre-react-native",
       "./app.plugin.js",
       [
         "expo-splash-screen",

@@ -252,14 +252,11 @@ export default function NewAlarmScreen() {
             </ScrollView>
 
             {/* Map Modal */}
-            <Modal visible={mapVisible} animationType="slide">
-                <MapPicker onSelect={handleMapSelect} />
-                <TouchableOpacity
-                    style={[styles.button, styles.closeButton]}
-                    onPress={() => setMapVisible(false)}
-                >
-                    <Text style={styles.buttonText}>✕ Close Map</Text>
-                </TouchableOpacity>
+            <Modal visible={mapVisible} animationType="slide" statusBarTranslucent>
+                <MapPicker
+                  onSelect={handleMapSelect}
+                  onClose={() => setMapVisible(false)}
+                />
             </Modal>
 
             <BatteryOptimizationModal 

@@ -62,37 +62,68 @@ export const BatteryOptimizationModal: React.FC<BatteryOptimizationModalProps> =
         <View style={styles.container}>
           {step === 1 && (
             <View>
-              <Text style={styles.title}>Keep Your Alarms Reliable</Text>
+              <Text style={styles.title}>⚡ Important Setup</Text>
               <Text style={styles.text}>
-                To ensure WakeMeUp can accurately track your location and ring the alarm in the background, we need to adjust some battery settings.
+                WakeMeUp needs to run in the background to track your location and ring alarms. Without this, Android may kill the app and your alarms won't work.
               </Text>
+              <Text style={styles.stepLabel}>We'll guide you through 2 quick steps:</Text>
+              <View style={styles.stepList}>
+                <Text style={styles.stepItem}>1️⃣  Turn off battery optimization</Text>
+                <Text style={styles.stepItem}>2️⃣  Allow background activity</Text>
+              </View>
             </View>
           )}
 
           {step === 2 && (
             <View>
-              <Text style={styles.title}>Disable Battery Restrictions</Text>
+              <Text style={styles.title}>Step 1: Battery Optimization</Text>
               <Text style={styles.text}>
-                Please set the battery usage for WakeMeUp to "Unrestricted" or disable battery optimization for it in the settings screen that will open next.
+                A system dialog will appear. Follow these steps:
+              </Text>
+              <View style={styles.instructionBox}>
+                <Text style={styles.instructionStep}>👆 Tap <Text style={styles.bold}>"Allow"</Text></Text>
+                <Text style={styles.instructionNote}>
+                  This lets WakeMeUp run without Android killing it to save battery.
+                </Text>
+              </View>
+              <Text style={styles.warningText}>
+                ⚠️ If you see "Not optimized" or "Unrestricted" — that's already correct, just close the dialog.
               </Text>
             </View>
           )}
 
           {step === 3 && (
             <View>
-              <Text style={styles.title}>Enable Autostart</Text>
+              <Text style={styles.title}>Step 2: Allow Background Activity</Text>
               <Text style={styles.text}>
-                Your device ({Device.manufacturer}) requires you to allow WakeMeUp to run in the background. Please enable "Autostart" or allow background activity in the next screen.
+                Your {Device.manufacturer} phone has extra battery restrictions. A settings page will open.
+              </Text>
+              <View style={styles.instructionBox}>
+                <Text style={styles.instructionStep}>
+                  📱 Look for and <Text style={styles.bold}>enable</Text> any of these:
+                </Text>
+                <Text style={styles.instructionBullet}>• "Allow background activity" → Turn <Text style={styles.bold}>ON</Text></Text>
+                <Text style={styles.instructionBullet}>• "Auto-launch" / "Autostart" → Turn <Text style={styles.bold}>ON</Text></Text>
+                <Text style={styles.instructionBullet}>• Battery usage → Select <Text style={styles.bold}>"Don't optimize"</Text> or <Text style={styles.bold}>"No restrictions"</Text></Text>
+              </View>
+              <Text style={styles.warningText}>
+                ⚠️ After changing settings, come back to WakeMeUp and tap "Done".
               </Text>
             </View>
           )}
 
           {step === 4 && (
             <View>
-              <Text style={styles.title}>Manual Setup Required</Text>
+              <Text style={styles.title}>⚙️ Manual Setup Required</Text>
               <Text style={styles.text}>
-                We couldn't open the settings automatically. Please open your phone's Settings app, find WakeMeUp, and enable background activity / autostart manually.
+                We couldn't open the settings automatically. Please do this manually:
               </Text>
+              <View style={styles.instructionBox}>
+                <Text style={styles.instructionStep}>1. Open your phone's <Text style={styles.bold}>Settings</Text> app</Text>
+                <Text style={styles.instructionStep}>2. Go to <Text style={styles.bold}>Apps → WakeMeUp</Text></Text>
+                <Text style={styles.instructionStep}>3. Tap <Text style={styles.bold}>Battery</Text></Text>
+                <Text style={styles.instructionStep}>4. Select <Text style={styles.bold}>"Unrestricted"</Text> or <Text style={styles.bold}>"Don't optimize"</Text></Text>
+              </View>
             </View>
           )}
 
@@ -167,5 +198,60 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  stepLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  stepList: {
+    marginBottom: 8,
+  },
+  stepItem: {
+    fontSize: 15,
+    color: '#1f2937',
+    paddingVertical: 4,
+    fontWeight: '500',
+  },
+  instructionBox: {
+    backgroundColor: '#f0f9ff',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#3b82f6',
+  },
+  instructionStep: {
+    fontSize: 15,
+    color: '#1e40af',
+    marginBottom: 6,
+    lineHeight: 22,
+  },
+  instructionNote: {
+    fontSize: 13,
+    color: '#64748b',
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  instructionBullet: {
+    fontSize: 14,
+    color: '#334155',
+    paddingLeft: 8,
+    marginBottom: 4,
+    lineHeight: 20,
+  },
+  warningText: {
+    fontSize: 12,
+    color: '#92400e',
+    backgroundColor: '#fef3c7',
+    padding: 10,
+    borderRadius: 8,
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  bold: {
+    fontWeight: '800',
+    color: '#0f172a',
   },
 });

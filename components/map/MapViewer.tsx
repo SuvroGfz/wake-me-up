@@ -1,344 +1,434 @@
-import React, {useEffect, useRef, useMemo, useState} from 'react';
-import {View, Text, TouchableOpacity, StyleSheet} from 'react-native';
-import {WebView} from 'react-native-webview';
+// components/map/MapViewer.tsx
+// Native MapLibre map for viewing all alarms with geofences, user location, and controls.
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, StatusBar, Platform } from 'react-native';
+import {
+  Map,
+  Camera,
+  UserLocation,
+  ViewAnnotation,
+  Marker,
+  GeoJSONSource,
+  Layer,
+  type CameraRef,
+} from '@maplibre/maplibre-react-native';
 import * as Location from 'expo-location';
-import {PROXIMITY_THRESHOLD_METERS} from '@/constants/values';
+import { MAP_STYLE } from '@/constants/mapStyle';
+import { PROXIMITY_THRESHOLD_METERS } from '@/constants/values';
 
 interface LatLng {
-    latitude: number;
-    longitude: number;
+  latitude: number;
+  longitude: number;
 }
 
 interface Alarm {
-    id: string;
-    title: string;
-    coords: LatLng;
-    active: boolean;
-    radius?: number;
+  id: string;
+  title: string;
+  coords: LatLng;
+  active: boolean;
+  radius?: number;
 }
 
 interface MapViewerProps {
-    alarms: Alarm[];
-    height?: number;
-    onOpenAlarm?: (alarmId: string) => void;
+  alarms: Alarm[];
+  height?: number;
+  onOpenAlarm?: (alarmId: string) => void;
 }
 
-export default function MapViewer({alarms, height = 300, onOpenAlarm}: MapViewerProps) {
-    const webviewRef = useRef<WebView | null>(null);
-    const [filter, setFilter] = useState<'all' | 'active' | 'disabled'>('all');
-    const [userLocation, setUserLocation] = useState<LatLng | null>(null);
+/**
+ * Generate a GeoJSON polygon approximating a circle.
+ */
+function createCirclePolygon(
+  center: [number, number],
+  radiusMeters: number,
+  points: number = 64
+): GeoJSON.Feature<GeoJSON.Polygon> {
+  const [lng, lat] = center;
+  const coords: [number, number][] = [];
 
-    const [hasSnappedOnce, setHasSnappedOnce] = useState(false);
+  for (let i = 0; i <= points; i++) {
+    const angle = (i / points) * 2 * Math.PI;
+    const dLat = (radiusMeters / 111320) * Math.cos(angle);
+    const dLng =
+      (radiusMeters / (111320 * Math.cos((lat * Math.PI) / 180))) *
+      Math.sin(angle);
+    coords.push([lng + dLng, lat + dLat]);
+  }
 
+  return {
+    type: 'Feature',
+    properties: {},
+    geometry: {
+      type: 'Polygon',
+      coordinates: [coords],
+    },
+  };
+}
 
-    const filteredAlarms = alarms.filter((a) => {
+export default function MapViewer({ alarms, height = 300, onOpenAlarm }: MapViewerProps) {
+  const cameraRef = useRef<CameraRef>(null);
+  const [filter, setFilter] = useState<'all' | 'active' | 'disabled'>('all');
+  const [userLocation, setUserLocation] = useState<LatLng | null>(null);
+  const [hasSnappedOnce, setHasSnappedOnce] = useState(false);
+  const [locationPermissionGranted, setLocationPermissionGranted] = useState(false);
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
+
+  const filteredAlarms = useMemo(
+    () =>
+      alarms.filter((a) => {
         if (filter === 'all') return true;
         if (filter === 'active') return a.active;
         if (filter === 'disabled') return !a.active;
         return true;
-    });
+      }),
+    [alarms, filter]
+  );
 
-    // ------------------- LOCATION -------------------
-    const fetchLocation = async () => {
-        try {
-            const {status} = await Location.requestForegroundPermissionsAsync();
-            if (status !== 'granted') return;
-            const loc = await Location.getCurrentPositionAsync({});
-            setUserLocation({
-                latitude: loc.coords.latitude,
-                longitude: loc.coords.longitude,
-            });
-        } catch (err) {
-            console.warn('[MapViewer] Failed to get location', err);
-        }
-    };
-
-    useEffect(() => {
-        fetchLocation(); // initial
-        const interval = setInterval(fetchLocation, 5000);
-        return () => clearInterval(interval);
-    }, []);
-
-    // ------------------- SNAP TO USER ON INITIAL LOAD -------------------
-    useEffect(() => {
-        if (!userLocation || !webviewRef.current) return;
-
-        const payload = {
-            current: userLocation,
-            alarms: filteredAlarms.map(a => ({
-                ...a,
-                radius: a.radius || PROXIMITY_THRESHOLD_METERS,
-            })),
-            command: hasSnappedOnce ? undefined : 'snapUser',
-        };
-
-        webviewRef.current.postMessage(JSON.stringify(payload));
-
-        // Mark that snap has been done
-        if (!hasSnappedOnce) setHasSnappedOnce(true);
-    }, [userLocation]);
-
-
-    // ------------------- POST TO WEBVIEW -------------------
-    useEffect(() => {
-        if (!webviewRef.current) return;
-        const payload = {
-            current: userLocation,
-            alarms: filteredAlarms.map((a) => ({
-                id: a.id,
-                coords: a.coords,
-                title: a.title,
-                active: a.active,
-                radius: a.radius || PROXIMITY_THRESHOLD_METERS,
-            })),
-        };
-        webviewRef.current.postMessage(JSON.stringify(payload));
-    }, [filteredAlarms, userLocation]);
-
-    // ------------------- HTML LEAFLET -------------------
-    const html = useMemo(() => `
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<style>
-    html, body, #map { height: 100%; margin: 0; padding: 0; }
-    .leaflet-tooltip {
-        pointer-events: none !important;
-    }
-</style>
-</head>
-<body>
-<div id="map"></div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
-const map = L.map('map').setView([0,0], 2);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
-
-let currentMarker = null;
-let alarmMarkers = {};
-let alarmCircles = {};
-
-function updateMap(data) {
-  const { current, alarms, command } = data || {};
-
-  if (current) {
-    const pos = [current.latitude, current.longitude];
-    if (!currentMarker) {
-    currentMarker = L.circleMarker(pos, { 
-        radius: 8, 
-        color: '#007AFF', 
-        fillColor: '#007AFF', 
-        fillOpacity: 0.5 
-    }).addTo(map);
-
-    // Add temporary tooltip
-    const tooltip = L.tooltip({
-        permanent: false,
-        direction: 'top',
-        offset: [0, -10],
-        className: 'user-tooltip'
-    })
-    .setContent('You are here')
-    .setLatLng(pos)
-    .addTo(map);
-
-    // Remove tooltip after 3 seconds
-    setTimeout(() => map.removeLayer(tooltip), 3000);
-} else {
-    currentMarker.setLatLng(pos);
-}
-
-    if(command === 'snapUser') map.setView(pos, 16);
-  }
-
-  if(!alarms) return;
-  // Remove markers/circles that are no longer in the alarms array
-    Object.keys(alarmMarkers).forEach(id => {
-        if (!alarms.find(a => a.id === id)) {
-            map.removeLayer(alarmMarkers[id]);
-            delete alarmMarkers[id];
-        }
-    });
-    Object.keys(alarmCircles).forEach(id => {
-        if (!alarms.find(a => a.id === id)) {
-            map.removeLayer(alarmCircles[id]);
-            delete alarmCircles[id];
-        }
-    });
-
-  const bounds = [];
-
-  alarms.forEach(a => {
-    const pos = [a.coords.latitude, a.coords.longitude];
-    bounds.push(pos);
-    const color = a.active ? 'green' : 'red';
-
-    if(!alarmMarkers[a.id]) {
-      alarmMarkers[a.id] = L.marker(pos, {
-      title: a.title,
-      riseOnHover: true,
-      icon: L.icon({
-        iconUrl:'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-        iconSize:[25,41],
-        iconAnchor:[12,41]
-      })
-    })
-    .addTo(map)
-    .on('click', () => {
-        // send message TO REACT NATIVE
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-            type: 'openAlarm',
-            id: a.id
-        }));
-    })
-    .bindTooltip(a.title + (a.active ? ' (Active)' : ' (Disabled)'), {
-        permanent: true,
-        direction: 'right',
-        offset: [10, 0],
-    });
-
-    } else {
-      alarmMarkers[a.id].setLatLng(pos);
-      alarmMarkers[a.id].setPopupContent(a.title + (a.active?' (Active)':' (Disabled)'));
-    }
-
-    if(!alarmCircles[a.id]) {
-      alarmCircles[a.id] = L.circle(pos, { radius: a.radius, color: color, fillColor: a.active ? 'rgba(0,255,0,0.2)' : 'rgba(255,0,0,0.2)', fillOpacity:0.4 }).addTo(map);
-    } else {
-      alarmCircles[a.id].setLatLng(pos);
-      alarmCircles[a.id].setStyle({ color, fillColor: a.active?'rgba(0,255,0,0.2)':'rgba(255,0,0,0.2)' });
-    }
-  });
-
-  if(command === 'snapAlarms' && bounds.length > 0){
-    map.fitBounds(bounds, {padding:[50,50], maxZoom:16});
-  }
-}
-
-function handleMessage(e) {
-  try {
-    const data = JSON.parse(e.data);
-    updateMap(data);
-  } catch(err){}
-}
-document.addEventListener('message', handleMessage);
-window.addEventListener('message', handleMessage);
-</script>
-</body>
-</html>
-`, []);
-
-    // ------------------- BUTTON HANDLERS -------------------
-    const sendCommand = (command: string) => {
-        if (!webviewRef.current) return;
-
-        // Use filteredAlarms instead of all alarms
-        const payload = {
-            current: userLocation,
-            alarms: filteredAlarms.map(a => ({
-                ...a,
-                radius: a.radius || PROXIMITY_THRESHOLD_METERS
-            })),
-            command,
-        };
-
-        webviewRef.current.postMessage(JSON.stringify(payload));
-
-        // If command is refresh, also fetch new location
-        if (command === 'refresh') fetchLocation();
-    };
-
-
-    return (
-        <View style={{flex: 1}}>
-            {/* FILTER */}
-            <View style={styles.filterRow}>
-                {(['all', 'active', 'disabled'] as const).map(f => (
-                    <TouchableOpacity key={f} style={[styles.filterButton, filter === f && styles.filterButtonActive]}
-                                      onPress={() => setFilter(f)}>
-                        <Text
-                            style={[styles.filterText, filter === f && styles.filterTextActive]}>{f.charAt(0).toUpperCase() + f.slice(1)}</Text>
-                    </TouchableOpacity>
-                ))}
-            </View>
-
-            <View style={{flex: 1}}>
-                <WebView
-                    ref={webviewRef}
-                    originWhitelist={['*']}
-                    source={{html}}
-                    javaScriptEnabled
-                    allowFileAccess
-                    mixedContentMode="always"
-                    style={{flex: 1}}
-                    onMessage={e => {
-                        try {
-                            const data = JSON.parse(e.nativeEvent.data);
-                            if (data.type === 'openAlarm') {
-                                console.log("Open alarm:", data.id);
-
-                                // 🔥 Call parent handler if provided
-                                if (onOpenAlarm) {
-                                    onOpenAlarm(data.id);
-                                }
-                            }
-                        } catch (err) {
-                            console.log("Invalid msg", err);
-                        }
-                    }}
-
-                />
-
-                {/* Buttons */}
-                <View style={styles.buttonsContainer}>
-                    <TouchableOpacity style={styles.button} onPress={() => sendCommand('snapUser')}>
-                        <Text style={styles.buttonText}>📍</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.button} onPress={() => sendCommand('snapAlarms')}>
-                        <Text style={styles.buttonText}>🗺️</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.button} onPress={() => sendCommand('refresh')}>
-                        <Text style={styles.buttonText}>↻</Text>
-                    </TouchableOpacity>
-                </View>
-
-            </View>
-        </View>
+  // ---- Build geofence GeoJSON ----
+  const activeGeofenceGeoJSON = useMemo(() => {
+    const activeAlarms = filteredAlarms.filter(
+      (a) => a.active && a.coords?.latitude && a.coords?.longitude
     );
+    if (activeAlarms.length === 0) return null;
+
+    const features = activeAlarms.map((alarm) =>
+      createCirclePolygon(
+        [alarm.coords.longitude, alarm.coords.latitude],
+        alarm.radius || PROXIMITY_THRESHOLD_METERS
+      )
+    );
+
+    return {
+      type: 'FeatureCollection' as const,
+      features,
+    };
+  }, [filteredAlarms]);
+
+  const disabledGeofenceGeoJSON = useMemo(() => {
+    const disabledAlarms = filteredAlarms.filter(
+      (a) => !a.active && a.coords?.latitude && a.coords?.longitude
+    );
+    if (disabledAlarms.length === 0) return null;
+
+    const features = disabledAlarms.map((alarm) =>
+      createCirclePolygon(
+        [alarm.coords.longitude, alarm.coords.latitude],
+        alarm.radius || PROXIMITY_THRESHOLD_METERS
+      )
+    );
+
+    return {
+      type: 'FeatureCollection' as const,
+      features,
+    };
+  }, [filteredAlarms]);
+
+  // ---- Location polling ----
+  const fetchLocation = useCallback(async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (!isMounted.current) return;
+      if (status !== 'granted') return;
+      setLocationPermissionGranted(true);
+      const loc = await Location.getCurrentPositionAsync({});
+      if (!isMounted.current) return;
+      setUserLocation({
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+      });
+    } catch (err) {
+      console.warn('[MapViewer] Failed to get location', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchLocation();
+    const interval = setInterval(fetchLocation, 5000);
+    return () => clearInterval(interval);
+  }, [fetchLocation]);
+
+  // ---- Snap to user on first load ----
+  useEffect(() => {
+    if (!userLocation || hasSnappedOnce) return;
+    cameraRef.current?.flyTo({
+      center: [userLocation.longitude, userLocation.latitude],
+      zoom: 15,
+      duration: 1500,
+    });
+    setHasSnappedOnce(true);
+  }, [userLocation, hasSnappedOnce]);
+
+  // ---- Button handlers ----
+  const snapToUser = () => {
+    if (!userLocation) return;
+    cameraRef.current?.flyTo({
+      center: [userLocation.longitude, userLocation.latitude],
+      zoom: 15,
+      duration: 1500,
+    });
+  };
+
+  const snapToAlarms = () => {
+    if (filteredAlarms.length === 0) return;
+    const lngs = filteredAlarms.map((a) => a.coords.longitude);
+    const lats = filteredAlarms.map((a) => a.coords.latitude);
+
+    let west = Math.min(...lngs);
+    let south = Math.min(...lats);
+    let east = Math.max(...lngs);
+    let north = Math.max(...lats);
+
+    const MIN_SPREAD = 0.005;
+    if (east - west < MIN_SPREAD) {
+      const midLng = (east + west) / 2;
+      west = midLng - MIN_SPREAD / 2;
+      east = midLng + MIN_SPREAD / 2;
+    }
+    if (north - south < MIN_SPREAD) {
+      const midLat = (north + south) / 2;
+      south = midLat - MIN_SPREAD / 2;
+      north = midLat + MIN_SPREAD / 2;
+    }
+
+    const bounds: [number, number, number, number] = [west, south, east, north];
+    cameraRef.current?.fitBounds(bounds, {
+      padding: { top: 80, right: 80, bottom: 80, left: 80 },
+      duration: 1500,
+    });
+  };
+
+  return (
+    <View style={{ flex: 1 }}>
+      {/* Map fills entire area */}
+      <Map
+        style={{ flex: 1 }}
+        logo={false}
+        attribution={false}
+        mapStyle={MAP_STYLE as any}
+      >
+        <Camera
+          ref={cameraRef}
+          initialViewState={{
+            center: userLocation
+              ? [userLocation.longitude, userLocation.latitude]
+              : [90.4125, 23.8103],
+            zoom: 12,
+          }}
+        />
+
+        {locationPermissionGranted && <UserLocation visible={true} />}
+
+        {/* Geofence circles — Active alarms (green) */}
+        {activeGeofenceGeoJSON && (
+          <GeoJSONSource id="active-geofences" data={activeGeofenceGeoJSON}>
+            <Layer
+              id="active-geofence-fill"
+              type="fill"
+              style={{
+                fillColor: 'rgba(34, 197, 94, 0.35)',
+              }}
+            />
+            <Layer
+              id="active-geofence-border"
+              type="line"
+              style={{
+                lineColor: 'rgba(34, 197, 94, 0.8)',
+                lineWidth: 2,
+              }}
+            />
+          </GeoJSONSource>
+        )}
+
+        {/* Geofence circles — Disabled alarms (red) */}
+        {disabledGeofenceGeoJSON && (
+          <GeoJSONSource id="disabled-geofences" data={disabledGeofenceGeoJSON}>
+            <Layer
+              id="disabled-geofence-fill"
+              type="fill"
+              style={{
+                fillColor: 'rgba(239, 68, 68, 0.3)',
+              }}
+            />
+            <Layer
+              id="disabled-geofence-border"
+              type="line"
+              style={{
+                lineColor: 'rgba(239, 68, 68, 0.7)',
+                lineWidth: 2,
+              }}
+            />
+          </GeoJSONSource>
+        )}
+
+        {/* Alarm markers */}
+        {filteredAlarms.map((alarm) => {
+          if (!alarm.coords?.latitude || !alarm.coords?.longitude) return null;
+          return (
+            <Marker
+              key={`marker-${alarm.id}`}
+              id={`marker-${alarm.id}`}
+              lngLat={[alarm.coords.longitude, alarm.coords.latitude]}
+              anchor="bottom"
+              onPress={() => onOpenAlarm?.(alarm.id)}
+            >
+              <View style={styles.markerWrapper}>
+                <View
+                  style={[
+                    styles.markerLabel,
+                    { backgroundColor: alarm.active ? '#22c55e' : '#ef4444' },
+                  ]}
+                >
+                  <Text style={styles.markerLabelText} numberOfLines={1}>
+                    {alarm.title}
+                  </Text>
+                  <Text style={styles.markerStatusText}>
+                    {alarm.active ? '● Active' : '○ Disabled'}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.markerPin,
+                    { backgroundColor: alarm.active ? '#22c55e' : '#ef4444' },
+                  ]}
+                />
+                <View style={[
+                  styles.markerArrow,
+                  {
+                    borderTopColor: alarm.active ? '#22c55e' : '#ef4444',
+                  },
+                ]} />
+              </View>
+            </Marker>
+          );
+        })}
+      </Map>
+
+      {/* Filter row — absolute overlay on top of map */}
+      <View style={styles.filterRow}>
+        {(['all', 'active', 'disabled'] as const).map((f) => (
+          <TouchableOpacity
+            key={f}
+            style={[styles.filterButton, filter === f && styles.filterButtonActive]}
+            onPress={() => setFilter(f)}
+          >
+            <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>
+              {f.charAt(0).toUpperCase() + f.slice(1)}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Control buttons — absolute overlay */}
+      <View style={styles.buttonsContainer}>
+        <TouchableOpacity style={styles.button} onPress={snapToUser}>
+          <Text style={styles.buttonText}>📍</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.button} onPress={snapToAlarms}>
+          <Text style={styles.buttonText}>🗺️</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.button} onPress={fetchLocation}>
+          <Text style={styles.buttonText}>↻</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-    filterRow: {flexDirection: 'row', backgroundColor: 'white', padding: 10, justifyContent: 'space-between'},
-    filterButton: {
-        padding: 10,
-        borderRadius: 8,
-        backgroundColor: '#e5e7eb',
-        flex: 1,
-        marginHorizontal: 4,
-        alignItems: 'center',
-        justifyContent: 'center'
-    },
-    filterButtonActive: {backgroundColor: '#3b82f6'},
-    filterText: {color: 'black', fontWeight: '600'},
-    filterTextActive: {color: 'white'},
-    buttonsContainer: {position: 'absolute', bottom: 20, right: 10},
-    button: {
-        backgroundColor: '#3b82f6',   // softer, slightly darker blue
-        width: 40,                    // smaller width
-        height: 40,                   // smaller height
-        borderRadius: 20,             // keep it circular
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 12,             // spacing between stacked buttons
-        shadowColor: '#000',
-        shadowOffset: {width: 0, height: 2},
-        shadowOpacity: 0.3,
-        shadowRadius: 3,
-        elevation: 4,
-    },
-    buttonText: {color: 'white', fontSize: 24},
-    container: {width: '100%', borderRadius: 12, overflow: 'hidden', backgroundColor: '#eee'},
+  filterRow: {
+    position: 'absolute',
+    top: (StatusBar.currentHeight || 30) + 5,
+    left: 10,
+    right: 10,
+    flexDirection: 'row',
+    backgroundColor: 'white',
+    padding: 8,
+    borderRadius: 12,
+    justifyContent: 'space-between',
+    zIndex: 10,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+  },
+  filterButton: {
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: '#e5e7eb',
+    flex: 1,
+    marginHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterButtonActive: { backgroundColor: '#3b82f6' },
+  filterText: { color: 'black', fontWeight: '600' },
+  filterTextActive: { color: 'white' },
+  buttonsContainer: { position: 'absolute', bottom: 20, right: 10 },
+  button: {
+    backgroundColor: '#3b82f6',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  buttonText: { color: 'white', fontSize: 24 },
+  markerWrapper: {
+    alignItems: 'center',
+  },
+  markerLabel: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginBottom: 4,
+    minWidth: 60,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  markerLabelText: {
+    color: 'white',
+    fontSize: 11,
+    fontWeight: '700',
+    maxWidth: 120,
+  },
+  markerStatusText: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 9,
+    fontWeight: '500',
+  },
+  markerPin: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: 'white',
+    elevation: 3,
+  },
+  markerArrow: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 5,
+    borderRightWidth: 5,
+    borderTopWidth: 6,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: 'white',
+    marginTop: -1,
+  },
 });

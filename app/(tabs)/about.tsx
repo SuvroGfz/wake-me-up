@@ -10,7 +10,7 @@ export default function AboutScreen() {
     const links = [
         { name: 'LinkedIn', url: 'https://www.linkedin.com/in/gazi-fardin-zafor-suvro-a755bb2a7/', icon: <Entypo name="linkedin" size={20} color="#0a66c2" /> },
         { name: 'GitHub', url: 'https://github.com/SuvroGfz', icon: <FontAwesome name="github" size={20} color="#000" /> },
-        { name: 'Portfolio', url: 'https://suvro.lovable.app/', icon: <Entypo name="link" size={20} color="#1e90ff" /> },
+        { name: 'Portfolio', url: 'https://suvrogfz.github.io/', icon: <Entypo name="link" size={20} color="#1e90ff" /> },
     ];
 
     return (

@@ -1,7 +1,7 @@
 // hooks/useAlarms.ts
 import {useState, useCallback} from 'react';
 import {Alarm} from '@/models/Alarm';
-import {loadAlarms, toggleAlarmActive, deleteAlarm} from '@/services/alarmService';
+import {loadAlarms, toggleAlarmActive, deleteAlarm, saveAlarms} from '@/services/alarmService';
 
 export const useAlarms = () => {
     const [alarms, setAlarms] = useState<Alarm[]>([]);
@@ -59,6 +59,19 @@ export const useAlarms = () => {
         }
     }, []);
 
+    /**
+     * Delete all alarms
+     */
+    const removeAll = useCallback(async () => {
+        try {
+            await saveAlarms([]);
+            setAlarms([]);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to delete all alarms');
+            console.error('[useAlarms] Delete all error:', err);
+        }
+    }, []);
+
     return {
         alarms,
         loading,
@@ -66,5 +79,6 @@ export const useAlarms = () => {
         refresh,
         toggle,
         remove,
+        removeAll,
     };
 };

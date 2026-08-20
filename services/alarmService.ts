@@ -88,6 +88,12 @@ export const toggleAlarmActive = async (id: string): Promise<boolean> => {
     if (!alarm) return false;
 
     alarm.active = !alarm.active;
+    alarm.color = alarm.active ? 'green' : 'red';
+
+    if (alarm.active) {
+        alarm.activatedAt = new Date().toISOString();
+    }
+
     await saveAlarms(alarms);
 
     // Clear triggered status when re-enabling
@@ -159,4 +165,61 @@ export const clearAllTriggeredStatuses = async (): Promise<void> => {
     } catch (error) {
         console.error('[AlarmService] Failed to clear all triggered:', error);
     }
+};
+
+/**
+ * Seed demo alarms around Dhaka for testing
+ */
+export const seedDemoAlarms = async (): Promise<void> => {
+    const existing = await loadAlarms();
+    
+    const demoAlarms: Alarm[] = [
+        {
+            id: 'demo_banani',
+            title: 'Banani',
+            coords: { latitude: 23.7938, longitude: 90.4035 },
+            tone: 'alarm1' as AlarmTone,
+            active: false,
+            createdAt: new Date().toISOString(),
+            activatedAt: new Date().toISOString(),
+            customToneUri: null,
+            vibrate: true,
+            color: 'red',
+        },
+        {
+            id: 'demo_mirpur1',
+            title: 'Mirpur-1',
+            coords: { latitude: 23.7956, longitude: 90.3527 },
+            tone: 'alarm2' as AlarmTone,
+            active: false,
+            createdAt: new Date().toISOString(),
+            activatedAt: new Date().toISOString(),
+            customToneUri: null,
+            vibrate: true,
+            color: 'red',
+        },
+        {
+            id: 'demo_agargaon',
+            title: 'Agargaon',
+            coords: { latitude: 23.7778, longitude: 90.3680 },
+            tone: 'alarm3' as AlarmTone,
+            active: false,
+            createdAt: new Date().toISOString(),
+            activatedAt: new Date().toISOString(),
+            customToneUri: null,
+            vibrate: true,
+            color: 'red',
+        },
+    ];
+
+    // Only add demos that don't already exist — never overwrite
+    const existingIds = new Set(existing.map(a => a.id));
+    const newDemos = demoAlarms.filter(d => !existingIds.has(d.id));
+    if (newDemos.length === 0) {
+        console.log('[AlarmService] Demo alarms already exist, skipping seed');
+        return;
+    }
+    const merged = [...existing, ...newDemos];
+    await saveAlarms(merged);
+    console.log(`[AlarmService] Seeded ${newDemos.length} demo alarms`);
 };

@@ -30,12 +30,30 @@ export default function AlarmCard({alarm, onToggle, onEdit, onDelete}: AlarmCard
     return (
         <View style={styles.card}>
             <View style={styles.header}>
-                <Text style={styles.title}>{alarm.title}</Text>
+                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    {/* Messenger-style active indicator */}
+                    <View style={styles.statusIndicatorWrapper}>
+                        <View style={[
+                            styles.statusDot,
+                            alarm.active ? styles.statusDotActive : styles.statusDotInactive,
+                        ]} />
+                        {alarm.active && <View style={styles.statusRing} />}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.title}>{alarm.title}</Text>
+                        <Text style={[
+                            styles.statusLabel,
+                            { color: alarm.active ? '#16a34a' : '#9ca3af' },
+                        ]}>
+                            {alarm.active ? 'Active' : 'Disabled'}
+                        </Text>
+                    </View>
+                </View>
                 <Switch
                     value={alarm.active}
                     onValueChange={() => onToggle(alarm.id)}
-                    trackColor={{false: '#d1d5db', true: '#60a5fa'}}
-                    thumbColor={alarm.active ? '#2563eb' : '#f3f4f6'}
+                    trackColor={{false: '#d1d5db', true: '#3b82f6'}}
+                    thumbColor={'#ffffff'}
                 />
             </View>
 
@@ -96,11 +114,40 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 12,
     },
+    statusIndicatorWrapper: {
+        width: 16,
+        height: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    statusDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+    },
+    statusDotActive: {
+        backgroundColor: '#22c55e',
+    },
+    statusDotInactive: {
+        backgroundColor: '#d1d5db',
+    },
+    statusRing: {
+        position: 'absolute',
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        borderWidth: 2,
+        borderColor: 'rgba(34, 197, 94, 0.3)',
+    },
+    statusLabel: {
+        fontSize: 11,
+        fontWeight: '500',
+        marginTop: 1,
+    },
     title: {
         fontSize: 18,
         fontWeight: '700',
         color: '#1f2937',
-        flex: 1,
     },
     details: {
         marginBottom: 8,

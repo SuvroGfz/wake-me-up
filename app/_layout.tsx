@@ -10,6 +10,7 @@ import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-
 import { setupNotificationChannel, setupNotificationCategories } from '@/services/notificationService';
 import { stopAlarm, getActiveAlarmId, isAlarmRinging, handleHardwareButton } from '@/services/alarmManagerService';
 import { STOP_ALARM_ACTION } from '@/constants/values';
+import { seedDemoAlarms } from '@/services/alarmService';
 import '@/background/locationTask'; // Register background task
 
 // Prevent auto-hiding so we control when it goes away
@@ -95,6 +96,9 @@ export default function RootLayout() {
 
                 const result = await startBackgroundLocationTracking();
                 if (!result.success) console.error('[App] Failed to start tracking:', result.error);
+
+                // Seed demo alarms for testing (idempotent)
+                await seedDemoAlarms();
             } catch (error) {
                 console.error('[App] Initialization error:', error);
             } finally {
@@ -107,7 +111,7 @@ export default function RootLayout() {
 
     return (
         <SafeAreaProvider>
-            <SafeAreaView style={{ flex: 1, paddingTop: insets.top, paddingBottom: insets.bottom }}>
+            <SafeAreaView style={{ flex: 1, backgroundColor: '#ffffff' }}>
                 <Stack screenOptions={{ headerShown: false }}>
                     <Stack.Screen name="(tabs)" />
                     <Stack.Screen name="new-alarm" options={{ presentation: 'modal', headerShown: false }} />

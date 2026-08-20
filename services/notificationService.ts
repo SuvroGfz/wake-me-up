@@ -61,7 +61,7 @@ export const sendAlarmNotification = async (alarm: Alarm): Promise<string> => {
         importance: AndroidImportance.HIGH,
         bypassDnd: true,
         vibration: true,
-        vibrationPattern: [0, 400, 200, 400],
+        vibrationPattern: [300, 400, 300, 400],
         lights: true,
         lightColor: '#dc2626',
     });
@@ -129,7 +129,7 @@ export const showPersistentAlarmNotification = async (alarm: Alarm): Promise<str
                 priority: Notifications.AndroidNotificationPriority.MAX,
                 sticky: true,       // keep notification visible
                 autoCancel: false,  // do not auto dismiss
-                vibrationPattern: [0, 400, 200, 400], // supplemental — audioService handles vibration
+                vibrationPattern: [300, 400, 300, 400], // supplemental — audioService handles vibration
             }
         },
         trigger: null
